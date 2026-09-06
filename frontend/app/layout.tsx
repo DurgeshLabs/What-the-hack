@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "What the Hack - Attack Forecasting",
@@ -19,10 +20,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <h1 className="text-lg font-bold">What the Hack — Network Attack Forecasting</h1>
             </div>
             <nav className="flex gap-4 text-sm text-slate-600">
-              <span>Dashboard</span>
-              <span>Alerts</span>
-              <span>Upload</span>
-              <span>Admin</span>
+              <Link href="/dashboard" className="hover:text-slate-900">Dashboard</Link>
+              <Link href="/alerts" className="hover:text-slate-900">Alerts</Link>
+              <Link href="/upload" className="hover:text-slate-900">Upload</Link>
+              <Link href="/admin" className="hover:text-slate-900">Admin</Link>
             </nav>
           </div>
         </header>
