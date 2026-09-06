@@ -154,3 +154,13 @@ export async function getAlertDetail(id: string) {
 
   return details[id] ?? details["1"]; // fallback so every id shows something for now
 }
+
+export async function startReplay(fileName: string) {
+  // Fake job trigger — pretend it starts processing
+  return { jobId: "job-001", status: "pending" };
+}
+
+export async function getJobStatus(jobId: string) {
+  // Fake status check — normally you'd poll this repeatedly
+  return { jobId, status: "running", progress: 45 };
+}
