@@ -30,7 +30,7 @@ python ai/feature_engineering/validate_feature_schema.py
 
 ## 3. Train on real data
 
-Download or generate a CICIDS2017 CSV, then run:
+Download a labeled CICIDS2017 CSV, then run:
 
 ```bash
 PYTHONPATH=.:backend python -m ai.training.train_world_model path/to/cicids.csv --epochs 15
@@ -38,6 +38,26 @@ PYTHONPATH=.:backend python -m ai.training.train_world_model path/to/cicids.csv 
 
 The trainer accepts either raw CICIDS2017 headers or the app's normalized upload CSV.
 It writes `ai/models/world_model.pt` locally. Do not commit this artifact.
+
+### Compact public archive variant
+
+If the downloaded archive contains `monday.csv` through `friday.csv` with decimal-IP
+columns such as `Src IP dec` and short `mm:ss.s` timestamps, normalize it first:
+
+```bash
+PYTHONPATH=.:backend python -m ai.datasets.prepare_archive_training_data \
+  /path/to/archive --out ai/datasets/cleaned/cicids2017_archive_clean.csv --stride 20
+```
+
+The cleaner converts decimal addresses, column aliases, malformed numeric values, and
+label variants. Because this mirror omits the hour/day in its timestamps, it builds a
+deterministic source-order replay timeline; use the original official timestamped CSVs
+for final research metrics. Train the cleaned replay with:
+
+```bash
+PYTHONPATH=.:backend python -m ai.training.train_world_model \
+  ai/datasets/cleaned/cicids2017_archive_clean.csv --epochs 15
+```
 
 ## 4. Test the trained model in Python
 

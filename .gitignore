@@ -48,3 +48,6 @@ ai/models/*.pt
 
 # Logs
 *.log
+ai/datasets/cleaned/
+output/
+tmp/
