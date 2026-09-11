@@ -67,7 +67,9 @@ export function login(email: string, password: string): Promise<TokenResponse> {
 }
 
 export function saveSession(session: TokenResponse) { localStorage.setItem("wth_session", JSON.stringify(session)); }
-export function getSession(): TokenResponse | null { const raw = typeof window === "undefined" ? null : localStorage.getItem("wth_session"); return raw ? JSON.parse(raw) as TokenResponse : null; }
+export function getSession(): TokenResponse | null { const raw = typeof window === "undefined" ? null : localStorage.getItem("wth_session"); try { return raw ? JSON.parse(raw) as TokenResponse : null; } catch { return null; } }
+export function clearSession() { if (typeof window !== "undefined") localStorage.removeItem("wth_session"); }
+export function isUnauthorized(error: unknown) { return error instanceof Error && error.message.startsWith("401 "); }
 
 export function refresh(refreshToken: string): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/refresh", { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) });

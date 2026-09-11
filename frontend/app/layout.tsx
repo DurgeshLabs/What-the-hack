@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
-import Link from "next/link";
+import { SessionNav } from "@/components/SessionNav";
 
 export const metadata: Metadata = {
   title: "What the Hack - Attack Forecasting",
@@ -19,12 +19,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">SIH26153 · NTRO</p>
               <h1 className="text-lg font-bold">What the Hack — Network Attack Forecasting</h1>
             </div>
-            <nav className="flex gap-4 text-sm text-slate-600">
-              <Link href="/dashboard" className="hover:text-slate-900">Dashboard</Link>
-              <Link href="/alerts" className="hover:text-slate-900">Alerts</Link>
-              <Link href="/upload" className="hover:text-slate-900">Upload</Link>
-              <Link href="/admin" className="hover:text-slate-900">Admin</Link>
-            </nav>
+            <SessionNav />
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>

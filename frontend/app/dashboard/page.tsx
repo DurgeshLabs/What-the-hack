@@ -1,13 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Forecast, Overview, getForecast, getOverview, getSession, saveForecast } from "@/lib/api";
+import { Forecast, Overview, clearSession, getForecast, getOverview, getSession, isUnauthorized, saveForecast } from "@/lib/api";
 const badge: Record<string, string> = { low: "bg-emerald-100 text-emerald-800", medium: "bg-amber-100 text-amber-800", high: "bg-orange-100 text-orange-800", critical: "bg-red-100 text-red-800" };
 function Line({ values, color = "#6366f1" }: { values: number[]; color?: string }) { if (!values.length) return null; const max = Math.max(...values, 1), min = Math.min(...values, 0), span = Math.max(max - min, 1); const points = values.map((value, i) => `${(i / Math.max(values.length - 1, 1)) * 100},${90 - ((value - min) / span) * 76}`).join(" "); return <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-52 w-full overflow-visible"><path d="M0 90 H100" stroke="#e2e8f0" strokeWidth="1"/><polyline points={points} fill="none" stroke={color} strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 export default function DashboardPage() {
   const [overview, setOverview] = useState<Overview | null>(null); const [forecast, setForecast] = useState<Forecast | null>(null); const [error, setError] = useState<string | null>(null); const [saving, setSaving] = useState(false);
   const session = getSession(); const sourceId = typeof window === "undefined" ? null : localStorage.getItem("wth_source_id");
-  useEffect(() => { if (!session || !sourceId) return; getOverview(session.access_token, sourceId).then(setOverview).catch(e => setError(e.message)); getForecast(session.access_token, sourceId).then(setForecast).catch(() => undefined); }, [session?.access_token, sourceId]);
+  useEffect(() => { if (!session || !sourceId) return; getOverview(session.access_token, sourceId).then(setOverview).catch(e => { if (isUnauthorized(e)) { clearSession(); window.location.href = "/login"; return; } setError(e.message); }); getForecast(session.access_token, sourceId).then(setForecast).catch(() => undefined); }, [session?.access_token, sourceId]);
   async function saveAlert() { if (!session || !sourceId) return; setSaving(true); try { const saved = await saveForecast(session.access_token, sourceId); window.location.href = `/alerts/${saved.alert_id}`; } catch (e) { setError(e instanceof Error ? e.message : "Could not save forecast"); } finally { setSaving(false); } }
   if (!session) return <Empty title="Sign in to view live traffic" detail="The dashboard uses your analyst session to read uploaded data." href="/login" action="Sign in" />;
   if (!sourceId) return <Empty title="No traffic source selected" detail="Upload a normalized traffic CSV to create a 60-second feature timeline." href="/upload" action="Upload traffic" />;
