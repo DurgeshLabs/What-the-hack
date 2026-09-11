@@ -88,6 +88,8 @@ export default function DashboardPage() {
 
   const traffic = overview.traffic.slice(-60);
   const peak = forecast?.risk_timeline.reduce((current, point) => current.risk_score > point.risk_score ? current : point);
+  const stageTransitions = forecast?.risk_timeline.filter((point, index, timeline) => index === 0 || point.stage !== timeline[index - 1].stage) ?? [];
+  const projectedStage = peak?.stage ?? forecast?.risk_timeline[0]?.stage ?? "Unknown";
 
   return (
     <div className="space-y-6">
@@ -124,9 +126,15 @@ export default function DashboardPage() {
 
       {forecast && <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="font-semibold text-slate-900">MITRE-aligned forecast</h3>
-          <p className="mt-1 text-sm text-slate-500">Predicted progression category for each future one-minute window.</p>
-          <div className="mt-4 space-y-3">{forecast.risk_timeline.map((point) => <div key={point.step} className="flex items-center gap-3 text-sm"><span className="w-14 text-slate-500">+{point.step} min</span><div className="h-2 flex-1 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${point.risk_score * 100}%` }} /></div><span className="w-32 text-right font-medium text-slate-700">{point.stage ?? "Unknown"}</span></div>)}</div>
+          <h3 className="font-semibold text-slate-900">Forecasted attack stage</h3>
+          <p className="mt-1 text-sm text-slate-500">A coarse, MITRE-aligned progression category—not exact technique attribution.</p>
+          <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[.14em] text-indigo-600">Five-minute verdict</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{projectedStage}</p>
+            <p className="mt-1 text-sm text-slate-600">{stageTransitions.length === 1 ? "Sustained across all five forecast windows; no stage transition is predicted." : `${stageTransitions.length} stage changes are predicted across the five-minute projection.`}</p>
+          </div>
+          <div className="mt-4 space-y-3">{forecast.risk_timeline.map((point) => <div key={point.step} className="flex items-center gap-3 text-sm"><span className="w-14 text-slate-500">+{point.step} min</span><div className="h-2 flex-1 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${point.risk_score * 100}%` }} /></div><span className="w-12 text-right font-medium text-slate-700">{Math.round(point.risk_score * 100)}%</span></div>)}</div>
+          {stageTransitions.length > 1 && <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-600">Stage changes: {stageTransitions.map((point) => `+${point.step} min ${point.stage ?? "Unknown"}`).join(" → ")}</p>}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="font-semibold text-slate-900">What influenced this forecast</h3>
