@@ -38,6 +38,14 @@ downloading it. The bundled replay uses a deterministic source-order timeline be
 its public archive variant omits complete capture timestamps; it is a demo artifact,
 not evidence for final benchmark claims.
 
+## Screenshot
+
+The dashboard displays the observed traffic timeline alongside the five-step forecast.
+In this bundled demo run, 143 feature windows were built from the replay and the local
+world model forecast a peak risk of 78%.
+
+![What the Hack dashboard showing the observed traffic chart and five-minute risk forecast](frontend/public/screenshots/dashboard-forecast.png)
+
 ## Repository layout
 
 ```text
