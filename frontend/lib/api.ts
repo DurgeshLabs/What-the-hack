@@ -158,14 +158,12 @@ export async function getAlertDetail(id: string) {
   return details[id] ?? details["1"]; // fallback so every id shows something for now
 }
 
-export interface IngestionJob { id: string; traffic_source_id: string; status: string; accepted_rows: number; skipped_rows: number; error_message: string | null; }
-export async function startReplay(file: File, token: string, sourceName?: string): Promise<IngestionJob> {
-  const body = new FormData(); body.append("file", file); if (sourceName) body.append("source_name", sourceName);
-  const response = await fetch(`${API_BASE_URL}/ingestion/upload`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
-  if (!response.ok) throw new Error(`Upload failed (${response.status})`);
-  return response.json() as Promise<IngestionJob>;
+export async function startReplay(fileName: string) {
+  // Fake job trigger — pretend it starts processing
+  return { jobId: "job-001", status: "pending" };
 }
 
-export function getJobStatus(jobId: string, token: string): Promise<IngestionJob> {
-  return request<IngestionJob>(`/ingestion/${jobId}/status`, {}, token);
+export async function getJobStatus(jobId: string) {
+  // Fake status check — normally you'd poll this repeatedly
+  return { jobId, status: "running", progress: 45 };
 }
