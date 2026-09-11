@@ -1,4 +1,4 @@
-"""Train a world model from the project's labeled uploaded-flow CSV format."""
+"""Train from normalized upload CSVs or raw CICIDS2017 labeled-flow CSVs."""
 
 from __future__ import annotations
 

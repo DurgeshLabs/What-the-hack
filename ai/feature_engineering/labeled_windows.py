@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import csv
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import ipaddress
@@ -94,6 +95,14 @@ def build_labeled_windows(csv_path: str | Path, window_seconds: int = 60) -> Lab
     from app.services.ingestion import parse_csv_flows  # backend parser is the input contract
 
     content = Path(csv_path).read_text(encoding="utf-8-sig")
+    # CICIDS2017's raw CSV uses columns such as "Source IP" and "Timestamp".
+    # Reuse the project mapper rather than maintaining a second set of conversions.
+    headers = set(next(csv.reader([content.splitlines()[0]]), []))
+    if "timestamp" not in headers and "Timestamp" in headers:
+        from ai.datasets.download_cicids2017 import map_cicids_to_raw_flows
+        import pandas as pd
+        normalized = map_cicids_to_raw_flows(pd.read_csv(csv_path, low_memory=False))
+        content = normalized.to_csv(index=False)
     parsed = parse_csv_flows(content)
     if not parsed.flows: raise ValueError("No valid flows were parsed from CSV.")
     buckets: dict[datetime, list[object]] = defaultdict(list)
