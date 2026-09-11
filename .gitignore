@@ -41,6 +41,7 @@ ai/models/*.joblib
 ai/models/*.bin
 ai/models/*.onnx
 ai/models/*.h5
+ai/models/*.pt
 *.zip
 *.pcap
 *.pcapng
