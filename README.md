@@ -12,14 +12,16 @@ This is forecasting, not detection: the model is trained with future-shifted lab
 features of window `t` predict whether an attack starts or escalates in `(t, t + horizon]`.
 See `docs/research/forecasting_formulation.md`.
 
-## Status
+## Project status
 
-| Area | Done | Next |
+The **end-to-end demo product is complete**: authenticate → upload CSV traffic → build 60-second feature windows → forecast risk and a MITRE stage → view explanations → save and inspect an alert.
+
+| Area | Included now | Important limitation |
 | --- | --- | --- |
-| Backend | FastAPI scaffold, PostgreSQL schema + Alembic migrations, JWT auth + RBAC, CSV ingestion, 60-second traffic windows, Pydantic inference schemas, Docker | Feature extraction, inference adapter (timeout + fallback), predictions and alerts API, audit trail |
-| ML | Forecasting formulation, CICIDS2017 tool, feature-schema contract v1 (37 features), rule-based fallback via `ai.inference.forecast`, contract test suite, sample replay CSV | Window feature extraction, forecasting labels, XGBoost baseline, evaluation report |
-| Frontend | Next.js scaffold with API client and backend health card | Login, dashboard, alerts list, alert detail, upload/admin pages |
-| Deployment | `docker-compose.yml` for db + backend + frontend, CI workflow | Demo seed data, backup demo build |
+| Backend | JWT/RBAC, CSV ingestion, 37-feature window extraction, forecast endpoint, persisted alerts, PostgreSQL migrations | No live PCAP capture or streaming ingestion |
+| ML | PyTorch dynamics + risk-stage model, label/window pipeline, logistic-regression comparison utility, checkpoint loading | The checked-in project does **not** include a trained CICIDS checkpoint or real benchmark metrics |
+| Frontend | Login, upload, dashboard charts, MITRE timeline, explanations, alerts list/detail | It needs a locally mounted model artifact to show a forecast |
+| Deployment | Docker Compose stack, health checks, demo accounts | Development defaults only; change secrets for any shared deployment |
 
 ## Repository layout
 
@@ -43,22 +45,53 @@ See `docs/research/forecasting_formulation.md`.
 
 ## Quick start
 
-### Option A — everything in Docker
+### Run the complete demo in Docker
 
 ```bash
-cp .env.example .env            # set JWT_SECRET_KEY
+git clone https://github.com/DurgeshLabs/What-the-hack.git
+cd What-the-hack
+cp .env.example .env
 docker compose up --build
 ```
 
 | Service | URL |
 | --- | --- |
-| Frontend | http://localhost:3000 |
-| Backend API docs | http://localhost:8000/docs |
-| Health check | http://localhost:8000/api/v1/health |
+| Frontend | http://127.0.0.1:3000 |
+| Backend API docs | http://127.0.0.1:8000/docs |
+| Health check | http://127.0.0.1:8000/api/v1/health |
 | PostgreSQL | localhost:5432 (`what_the_hack` / `what_the_hack`) |
 
 `docker compose down` stops the stack and keeps the database volume. Only use
 `docker compose down -v` when you intend to delete local data.
+
+If your browser does not resolve `localhost`, use `127.0.0.1` exactly as shown above.
+
+### Seed local demo accounts
+
+Open a second terminal while Compose is running:
+
+```bash
+docker compose exec backend python scripts/seed_demo_users.py
+```
+
+| Role | Email | Local development password |
+| --- | --- | --- |
+| Analyst (recommended) | `analyst@what-the-hack.local` | `AnalystPass123!` |
+| Admin | `admin@what-the-hack.local` | `AdminPass123!` |
+| Viewer | `viewer@what-the-hack.local` | `ViewerPass123!` |
+
+These passwords are deliberately development-only. Change them and set a strong `JWT_SECRET_KEY` before exposing the service beyond your machine.
+
+### Use the app
+
+1. Open **http://127.0.0.1:3000/login** and sign in as the analyst.
+2. Go to **Upload** and select a normalized network-flow CSV. The required columns are timestamp, source/destination address, protocol, packet count, and byte count; see [`sample_data/`](sample_data/) for the accepted shape.
+3. Wait for the upload status to become `completed`. The service persists raw rows and builds 60-second traffic windows plus the 37-feature vectors.
+4. Select **Open your live dashboard**. It shows observed traffic immediately.
+5. For the forecast chart, MITRE prediction, and explanations, provide a trained checkpoint at `ai/models/world_model.pt` before starting Compose. See [the model runbook](docs/demo/world-model-runbook.md).
+6. Click **Save as alert** to add the current forecast to the investigation queue. Open **Alerts** to view the stored risk, stage, ranked contributors, and recommended actions.
+
+`sample_data/sample_flows_mini.csv` verifies upload/windowing but is intentionally too short to create the ten-window sequence required by the forecasting model.
 
 ### Option B — local development
 
@@ -81,11 +114,15 @@ Demo accounts are created by `backend/scripts/seed_demo_users.py` (roles `admin`
 Likewise the backend refuses to start outside development with the default
 `JWT_SECRET_KEY` or one shorter than 32 characters.
 
-### Try the pipeline
+### Train a model artifact
 
-Follow `docs/devlog/day-4-ingestion.md` to log in and upload
-`sample_data/sample_flows_mini.csv`, then `docs/devlog/day-5-windows-and-docker.md` to
-build and inspect the traffic windows.
+Training is separate from the product startup because artifacts and source datasets are not committed to Git:
+
+```bash
+PYTHONPATH=.:backend python -m ai.training.train_world_model path/to/cicids.csv --epochs 15
+```
+
+This writes `ai/models/world_model.pt`. Restart the backend after training, or start the stack with `WORLD_MODEL_CHECKPOINT=/app/ai/models/world_model.pt` in `.env`. Full data preparation, training, and evaluation instructions are in [the model runbook](docs/demo/world-model-runbook.md).
 
 ## Tests
 
@@ -113,7 +150,7 @@ Traffic source / dataset → Ingestion API → raw_flows → Window builder → 
 | Frontend | Next.js, React, Tailwind CSS |
 | Backend | FastAPI, SQLAlchemy 2, Alembic, Pydantic |
 | Database | PostgreSQL 16 |
-| ML | XGBoost / LightGBM baseline, Random Forest comparison, SHAP explanations |
+| ML | PyTorch world model + risk-stage head, logistic-regression comparison, feature contribution ranking |
 | Auth | JWT + role-based access control (`admin`, `analyst`, `viewer`) |
 | Deployment | Docker Compose; CPU-only, no paid APIs |
 
