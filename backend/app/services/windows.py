@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models.network import AuditLog, IngestionJob, RawFlow, TrafficWindow, WindowScope
+from app.models.network import AuditLog, IngestionJob, RawFlow, TrafficWindow, WindowFeature, WindowScope
+from app.services.features import window_features
+from ai.inference.contract import FEATURE_NAMES, FEATURE_SCHEMA_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,14 @@ def build_traffic_windows(db: Session, traffic_source_id: UUID) -> WindowBuildRe
             )
         )
     }
+    existing_features = {
+        feature.traffic_window_id: feature
+        for feature in db.scalars(select(WindowFeature).join(TrafficWindow).where(TrafficWindow.traffic_source_id == traffic_source_id))
+    }
+    flows_by_start: dict[datetime, list[RawFlow]] = defaultdict(list)
+    for flow in raw_flows:
+        flows_by_start[floor_to_window(flow.observed_at, settings.traffic_window_seconds)].append(flow)
+    prior, history = None, []
     for aggregate in aggregates:
         window = existing_windows.get(aggregate.window_start)
         if window is None:
@@ -94,6 +104,17 @@ def build_traffic_windows(db: Session, traffic_source_id: UUID) -> WindowBuildRe
         window.flow_count = aggregate.flow_count
         window.packet_count = aggregate.packet_count
         window.byte_count = aggregate.byte_count
+        db.flush()  # ensures a new TrafficWindow has an id for its one-to-one feature row
+        calculated = window_features(flows_by_start[aggregate.window_start], prior, history, settings.traffic_window_seconds)
+        # Private helper keys are needed only for the next momentum calculation.
+        payload = {name: calculated[name] for name in FEATURE_NAMES}
+        feature = existing_features.get(window.id)
+        if feature is None:
+            feature = WindowFeature(traffic_window_id=window.id, feature_schema_version=FEATURE_SCHEMA_VERSION, features_json=payload)
+            db.add(feature)
+        else:
+            feature.feature_schema_version, feature.features_json, feature.is_complete, feature.missing_fields_json = FEATURE_SCHEMA_VERSION, payload, True, []
+        prior, history = calculated, [*history, calculated]
     return WindowBuildResult(
         traffic_source_id=traffic_source_id,
         raw_flows_processed=len(raw_flows),
