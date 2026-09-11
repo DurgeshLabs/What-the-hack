@@ -7,7 +7,7 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://loca
 
 export type HealthResponse = Record<string, unknown>;
 
-export type RiskLevel = "low" | "medium" | "high";
+export type RiskLevel = "low" | "medium" | "high" | "critical";
 
 export interface AlertCard {
   id: string;
@@ -72,6 +72,9 @@ export interface TokenResponse {
 export function login(email: string, password: string): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 }
+
+export function saveSession(session: TokenResponse) { localStorage.setItem("wth_session", JSON.stringify(session)); }
+export function getSession(): TokenResponse | null { const raw = typeof window === "undefined" ? null : localStorage.getItem("wth_session"); return raw ? JSON.parse(raw) as TokenResponse : null; }
 
 export function refresh(refreshToken: string): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/refresh", { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) });
@@ -155,12 +158,14 @@ export async function getAlertDetail(id: string) {
   return details[id] ?? details["1"]; // fallback so every id shows something for now
 }
 
-export async function startReplay(fileName: string) {
-  // Fake job trigger — pretend it starts processing
-  return { jobId: "job-001", status: "pending" };
+export interface IngestionJob { id: string; traffic_source_id: string; status: string; accepted_rows: number; skipped_rows: number; error_message: string | null; }
+export async function startReplay(file: File, token: string, sourceName?: string): Promise<IngestionJob> {
+  const body = new FormData(); body.append("file", file); if (sourceName) body.append("source_name", sourceName);
+  const response = await fetch(`${API_BASE_URL}/ingestion/upload`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
+  if (!response.ok) throw new Error(`Upload failed (${response.status})`);
+  return response.json() as Promise<IngestionJob>;
 }
 
-export async function getJobStatus(jobId: string) {
-  // Fake status check — normally you'd poll this repeatedly
-  return { jobId, status: "running", progress: 45 };
+export function getJobStatus(jobId: string, token: string): Promise<IngestionJob> {
+  return request<IngestionJob>(`/ingestion/${jobId}/status`, {}, token);
 }

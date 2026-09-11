@@ -1,83 +1,22 @@
-// app/dashboard/page.tsx
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getDashboardSummary } from "@/lib/api";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { FeatureBars, RiskTimeline, StageDistribution } from "@/components/ForecastCharts";
+import { API_BASE_URL, getSession } from "@/lib/api";
+
+type Overview = { window_count: number; model_ready: boolean; traffic: { timestamp: string; packets: number; bytes: number; flows: number }[]; latest_features: Record<string, number> | null };
+type Forecast = { risk_timeline: number[]; predicted_stages: string[]; peak_risk_window: number; peak_risk_stage: string; top_contributing_features: { feature: string; attribution: number }[] };
+
+async function api<T>(path: string, token: string): Promise<T> { const response = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }); if (!response.ok) throw new Error(await response.text()); return response.json() as Promise<T>; }
 
 export default function DashboardPage() {
-  const [data, setData] = useState<any>(null);
-
-  useEffect(() => {
-    getDashboardSummary().then(setData);
-  }, []);
-
-  if (!data) return <p className="p-8">Loading dashboard...</p>;
-
-  const { riskCounts, trafficTrend, topHosts } = data;
-
-  return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <h1 className="mb-6 text-2xl font-bold text-gray-800">Dashboard</h1>
-
-      {/* Risk summary cards */}
-      <div className="mb-8 grid grid-cols-4 gap-4">
-        <RiskCard label="Low" count={riskCounts.low} color="bg-risk-low" />
-        <RiskCard label="Medium" count={riskCounts.medium} color="bg-risk-medium" />
-        <RiskCard label="High" count={riskCounts.high} color="bg-risk-high" />
-        <RiskCard label="Critical" count={riskCounts.critical} color="bg-risk-critical" />
-      </div>
-
-      {/* Traffic trend chart */}
-      <div className="mb-8 rounded-lg bg-white p-6 shadow">
-        <h2 className="mb-4 text-lg font-semibold text-gray-700">
-          Traffic Trend
-        </h2>
-        <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={trafficTrend}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="time" />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Top suspicious hosts */}
-      <div className="rounded-lg bg-white p-6 shadow">
-        <h2 className="mb-4 text-lg font-semibold text-gray-700">
-          Top Suspicious Hosts
-        </h2>
-        <ul>
-          {topHosts.map((h: any) => (
-            <li
-              key={h.host}
-              className="flex justify-between border-b border-gray-100 py-2 last:border-0"
-            >
-              <span className="text-gray-700">{h.host}</span>
-              <span className="font-semibold text-risk-high">{h.score}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
+  const [overview, setOverview] = useState<Overview | null>(null); const [forecast, setForecast] = useState<Forecast | null>(null); const [notice, setNotice] = useState("Upload a replay to start analysing live traffic windows.");
+  useEffect(() => { const session = getSession(), source = localStorage.getItem("wth_source_id"); if (!session || !source) return; api<Overview>(`/analytics/overview?traffic_source_id=${source}`, session.access_token).then(data => { setOverview(data); setNotice(data.model_ready ? "Model artifact is configured. Fetching forecast…" : "Traffic is live. Train the model and set WORLD_MODEL_CHECKPOINT to enable forecasting."); if (data.model_ready) return api<Forecast>(`/analytics/forecast?traffic_source_id=${source}`, session.access_token).then(setForecast); }).catch(() => setNotice("Could not reach the API. Start the backend, log in, then upload a replay.")); }, []);
+  const traffic = overview?.traffic.slice(-20).map((row, index, rows) => ({ label: index === 0 || index === rows.length - 1 ? new Date(row.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "", value: Math.min(100, row.packets / Math.max(...rows.map(item => item.packets), 1) * 100) })) ?? [];
+  const featureBars = forecast?.top_contributing_features.map(item => ({ name: item.feature.replaceAll("_", " "), value: item.attribution, note: item.attribution.toFixed(3) })) ?? [];
+  const stages = forecast ? Array.from(new Set(forecast.predicted_stages)).map(stage => ({ label: stage, value: Math.round(forecast.predicted_stages.filter(item => item === stage).length / forecast.predicted_stages.length * 100), color: "#38bdf8" })) : [];
+  return <div className="space-y-6"><section className="overflow-hidden rounded-2xl bg-slate-950 p-7 text-white shadow-xl"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Threat forecasting workspace</p><div className="mt-4 flex flex-col justify-between gap-5 md:flex-row"><div><h2 className="text-3xl font-semibold">See the attack before it peaks.</h2><p className="mt-2 max-w-2xl text-sm text-slate-300">Real uploaded-flow windows, contract-bound features, and trained-model forecasts.</p></div><Link href="/upload" className="h-fit rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950">Upload traffic →</Link></div></section><section className="grid gap-4 sm:grid-cols-3"><Metric label="Observed windows" value={overview ? String(overview.window_count) : "—"} detail="60-second feature windows"/><Metric label="Forecast peak" value={forecast ? `${Math.round(Math.max(...forecast.risk_timeline) * 100)}` : "—"} detail={forecast ? `${forecast.peak_risk_stage} · five-minute horizon` : "Trained artifact required"}/><Metric label="Model status" value={overview?.model_ready ? "Ready" : "Offline"} detail={overview?.model_ready ? "Checkpoint loaded by API" : "Rule fallback remains available"}/></section><p className="rounded-xl border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-950">{notice}</p>{traffic.length > 1 && <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h3 className="font-semibold">Observed traffic volume</h3><p className="mb-5 text-sm text-slate-500">Packet volume from actual persisted traffic windows</p><RiskTimeline data={traffic}/></section>}{forecast && <section className="grid gap-6 xl:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2"><h3 className="font-semibold">Five-minute risk forecast</h3><p className="mb-5 text-sm text-slate-500">Predicted risk from the latest ten uploaded windows</p><RiskTimeline data={forecast.risk_timeline.map((value, index) => ({ label: `+${index + 1}m`, value: Math.round(value * 100) }))}/></div><div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h3 className="font-semibold">Predicted stage progression</h3><p className="mb-5 text-sm text-slate-500">MITRE-aligned model output</p><StageDistribution stages={stages}/></div></section>}{forecast && <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h3 className="font-semibold">Why the model is concerned</h3><p className="mb-5 text-sm text-slate-500">Gradient attribution from the trained model</p><FeatureBars features={featureBars}/></section>}</div>;
 }
 
-function RiskCard({ label, count, color }: { label: string; count: number; color: string }) {
-  return (
-    <div className={`rounded-lg p-4 text-white shadow ${color}`}>
-      <p className="text-sm opacity-90">{label}</p>
-      <p className="text-3xl font-bold">{count}</p>
-    </div>
-  );
-}
+function Metric({ label, value, detail }: { label: string; value: string; detail: string }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-3xl font-bold text-slate-900">{value}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></div>; }

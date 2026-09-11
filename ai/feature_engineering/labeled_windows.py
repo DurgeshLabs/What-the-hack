@@ -24,6 +24,20 @@ class LabeledWindows:
     stage_labels: np.ndarray
 
 
+def forecasting_labels(stages: np.ndarray, horizon_windows: int = 5) -> tuple[np.ndarray, np.ndarray]:
+    """Labels at t: whether an attack appears in (t, t + K], plus first stage.
+
+    This deliberately excludes the current window to prevent same-window leakage.
+    """
+    risk, next_stage = np.zeros(len(stages), dtype=np.float32), np.zeros(len(stages), dtype=np.int64)
+    for index in range(len(stages)):
+        future = stages[index + 1:index + 1 + horizon_windows]
+        attacks = future[future != 0]
+        if len(attacks):
+            risk[index], next_stage[index] = 1.0, attacks[0]
+    return risk, next_stage
+
+
 def _entropy(values: Iterable[object]) -> float:
     counts = Counter(values)
     total = sum(counts.values())
@@ -116,4 +130,6 @@ def build_labeled_windows(csv_path: str | Path, window_seconds: int = 60) -> Lab
         feature_rows.append([values[name] for name in FEATURE_NAMES])
         risks.append(float(stage != 0)); stages.append(stage)
         previous = values; past.append(values)
-    return LabeledWindows(np.asarray(feature_rows, dtype=np.float32), np.asarray(risks, dtype=np.float32), np.asarray(stages, dtype=np.int64))
+    stage_values = np.asarray(stages, dtype=np.int64)
+    risk_values, future_stages = forecasting_labels(stage_values)
+    return LabeledWindows(np.asarray(feature_rows, dtype=np.float32), risk_values, future_stages)
