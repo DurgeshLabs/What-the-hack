@@ -60,7 +60,8 @@ def upload_csv(
         db.flush()
     else:
         # Windows aggregate every raw flow of a source, so the same file loaded twice would
-        # double every count. Refuse the duplicate and point at the job that already holds it.
+        # double every count. Treat an already completed identical upload as idempotent:
+        # return its job so the UI can continue to the existing dashboard source.
         duplicate = db.scalar(
             select(IngestionJob).where(
                 IngestionJob.traffic_source_id == source.id,
@@ -69,14 +70,7 @@ def upload_csv(
             )
         )
         if duplicate is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "message": f"This file was already ingested into source '{normalized_source_name}'",
-                    "existing_job_id": str(duplicate.id),
-                    "traffic_source_id": str(source.id),
-                },
-            )
+            return duplicate
     job = IngestionJob(
         traffic_source_id=source.id, requested_by_user_id=user.id, original_filename=filename,
         content_hash=content_hash, status=IngestionStatus.RUNNING,

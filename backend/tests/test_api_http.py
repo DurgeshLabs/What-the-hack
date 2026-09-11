@@ -87,8 +87,8 @@ def test_upload_pipeline_windows_and_duplicate_guard(client, seeded_users) -> No
 
     duplicate = client.post("/api/v1/ingestion/upload", headers=bearer(admin["access_token"]),
                             data={"source_name": "http-test"}, files={"file": ("sample.csv", content, "text/csv")})
-    assert duplicate.status_code == 409
-    assert duplicate.json()["detail"]["existing_job_id"] == job["id"]
+    assert duplicate.status_code == 201
+    assert duplicate.json()["id"] == job["id"]
 
     # Background build ran inside the TestClient call; page through the windows two at a time.
     source_id = job["traffic_source_id"]
