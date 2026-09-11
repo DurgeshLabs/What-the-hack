@@ -23,6 +23,21 @@ The **end-to-end demo product is complete**: authenticate → upload CSV traffic
 | Frontend | Login, upload, dashboard charts, MITRE timeline, explanations, alerts list/detail | It needs a locally mounted model artifact to show a forecast |
 | Deployment | Docker Compose stack, health checks, demo accounts | Development defaults only; change secrets for any shared deployment |
 
+## Included demo artifacts
+
+A fresh clone contains the artifacts needed to run the demonstrated prediction path.
+
+| File | Purpose |
+| --- | --- |
+| `ai/datasets/cleaned/cicids2017_archive_clean.csv` | 105,000-row normalized, labeled CICIDS2017-derived replay for local upload and training checks |
+| `ai/models/world_model.pt` | Pre-trained PyTorch world-model checkpoint used by Docker Compose and the dashboard |
+
+The source archive is intentionally excluded because it is approximately 1.7 GB.
+The bundled replay and checkpoint let every teammate reproduce the UI demo without
+downloading it. The bundled replay uses a deterministic source-order timeline because
+its public archive variant omits complete capture timestamps; it is a demo artifact,
+not evidence for final benchmark claims.
+
 ## Repository layout
 
 ```text
@@ -85,10 +100,10 @@ These passwords are deliberately development-only. Change them and set a strong 
 ### Use the app
 
 1. Open **http://127.0.0.1:3000/login** and sign in as the analyst.
-2. Go to **Upload** and select a normalized network-flow CSV. The required columns are timestamp, source/destination address, protocol, packet count, and byte count; see [`sample_data/`](sample_data/) for the accepted shape.
+2. Go to **Upload** and select `ai/datasets/cleaned/cicids2017_archive_clean.csv`. This bundled file has enough data for the world-model sequence and is the recommended first demo replay. The required columns are timestamp, source/destination address, protocol, packet count, and byte count; see [`sample_data/`](sample_data/) for the accepted shape.
 3. Wait for the upload status to become `completed`. The service persists raw rows and builds 60-second traffic windows plus the 37-feature vectors.
 4. Select **Open your live dashboard**. It shows observed traffic immediately.
-5. For the forecast chart, MITRE prediction, and explanations, provide a trained checkpoint at `ai/models/world_model.pt` before starting Compose. See [the model runbook](docs/demo/world-model-runbook.md).
+5. The bundled `ai/models/world_model.pt` mounts automatically when Compose starts. Refresh the dashboard after upload to see the five-step forecast, MITRE prediction, and explanations.
 6. Click **Save as alert** to add the current forecast to the investigation queue. Open **Alerts** to view the stored risk, stage, ranked contributors, and recommended actions.
 
 `sample_data/sample_flows_mini.csv` verifies upload/windowing but is intentionally too short to create the ten-window sequence required by the forecasting model.
@@ -116,13 +131,16 @@ Likewise the backend refuses to start outside development with the default
 
 ### Train a model artifact
 
-Training is separate from the product startup because artifacts and source datasets are not committed to Git:
+To retrain the bundled model from the bundled replay:
 
 ```bash
-PYTHONPATH=.:backend python -m ai.training.train_world_model path/to/cicids.csv --epochs 15
+PYTHONPATH=.:backend python -m ai.training.train_world_model \
+  ai/datasets/cleaned/cicids2017_archive_clean.csv --epochs 15
 ```
 
-This writes `ai/models/world_model.pt`. Restart the backend after training, or start the stack with `WORLD_MODEL_CHECKPOINT=/app/ai/models/world_model.pt` in `.env`. Full data preparation, training, and evaluation instructions are in [the model runbook](docs/demo/world-model-runbook.md).
+This replaces `ai/models/world_model.pt`. Restart the backend after training.
+For final research, pass original timestamped CICIDS files instead; full preparation,
+training, and evaluation instructions are in [the model runbook](docs/demo/world-model-runbook.md).
 
 ## Tests
 

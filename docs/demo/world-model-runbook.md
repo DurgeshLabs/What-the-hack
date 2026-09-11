@@ -37,7 +37,9 @@ PYTHONPATH=.:backend python -m ai.training.train_world_model path/to/cicids.csv 
 ```
 
 The trainer accepts either raw CICIDS2017 headers or the app's normalized upload CSV.
-It writes `ai/models/world_model.pt` locally. Do not commit this artifact.
+It writes `ai/models/world_model.pt` locally. The repository includes one small
+demo-trained checkpoint so a fresh clone can run the dashboard; do not overwrite it
+with a new artifact unless you intend to version and review that training run.
 
 ### Compact public archive variant
 
@@ -77,16 +79,17 @@ five-step forecast, MITRE stage output, and feature explanations.
 
 ## 5. Docker demo
 
-Put the trained artifact at `ai/models/world_model.pt` locally, then set this in
-the repository-root `.env` before starting Compose:
+The bundled artifact at `ai/models/world_model.pt` is mounted by Compose by default.
+To use a different artifact, put it at that path or set this in the repository-root
+`.env` before starting Compose:
 
 ```bash
 WORLD_MODEL_CHECKPOINT=/app/ai/models/world_model.pt
 docker compose up --build
 ```
 
-The backend image installs `ai/requirements.txt`. Because model artifacts stay out
-of Git, copy the artifact into the running backend container for a local demo:
+The backend image installs `ai/requirements.txt`. If you keep a separate artifact
+outside the repository, copy it into the running backend container for a local demo:
 
 ```bash
 docker cp ai/models/world_model.pt what-the-hack-backend:/app/ai/models/world_model.pt
