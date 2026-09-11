@@ -20,7 +20,7 @@ The **end-to-end demo product is complete**: authenticate → upload CSV traffic
 | --- | --- | --- |
 | Backend | JWT/RBAC, CSV ingestion, 37-feature window extraction, forecast endpoint, persisted alerts, PostgreSQL migrations | No live PCAP capture or streaming ingestion |
 | ML | PyTorch dynamics + risk-stage model, label/window pipeline, bundled checkpoint, logistic-regression comparison utility | The bundled replay has incomplete source timestamps, so its evaluation result is a demo smoke test, not a final benchmark |
-| Frontend | Login, upload, dashboard charts, MITRE timeline, explanations, alerts list/detail, sign-out handling | No live PCAP capture or streaming dashboard yet |
+| Frontend | Login, upload, dashboard charts, a single MITRE-aligned stage verdict, mapping guide, explanations, alerts list/detail, sign-out handling | No live PCAP capture or streaming dashboard yet |
 | Deployment | Docker Compose stack, health checks, demo accounts | Development defaults only; change secrets for any shared deployment |
 
 ## Included demo artifacts
@@ -111,10 +111,24 @@ These passwords are deliberately development-only. Change them and set a strong 
 2. Go to **Upload** and select `ai/datasets/cleaned/cicids2017_archive_clean.csv`. This bundled file has enough data for the world-model sequence and is the recommended first demo replay. The required columns are timestamp, source/destination address, protocol, packet count, and byte count; see [`sample_data/`](sample_data/) for the accepted shape.
 3. Wait for the upload status to become `completed`. The service persists raw rows and builds 60-second traffic windows plus the 37-feature vectors.
 4. Select **Open your live dashboard**. It shows observed traffic immediately.
-5. The bundled `ai/models/world_model.pt` mounts automatically when Compose starts. Refresh the dashboard after upload to see the five-step forecast, MITRE prediction, and explanations.
+5. The bundled `ai/models/world_model.pt` mounts automatically when Compose starts. Refresh the dashboard after upload to see the five-step forecast, the attack-stage verdict, its MITRE-aligned mapping guide, and feature explanations.
 6. Click **Save as alert** to add the current forecast to the investigation queue. Open **Alerts** to view the stored risk, stage, ranked contributors, and recommended actions.
 
 `sample_data/sample_flows_mini.csv` verifies upload/windowing but is intentionally too short to create the ten-window sequence required by the forecasting model.
+
+### Reading the attack-stage forecast
+
+The dashboard deliberately shows one **five-minute stage verdict** rather than repeating the
+same stage label in every forecast row. The rows beneath it show risk by future minute. If the
+model predicts a change of stage, the interface instead displays the transition point and the
+new stage. A sustained stage means the model sees a continuing pattern, not five separate
+incidents.
+
+The six model classes are `Benign`, `Reconnaissance`, `Initial Access`, `Lateral Movement`,
+`Command & Control`, and `Exfiltration / Impact`. These are transparent, coarse
+CICIDS-to-MITRE-aligned progression categories—not verified ATT&CK techniques. The analyst
+must validate a forecast using endpoint, identity, and packet-level evidence. The exact label
+mapping is in [docs/research/mitre_stage_mapping.md](docs/research/mitre_stage_mapping.md).
 
 ### Option B — local development
 
