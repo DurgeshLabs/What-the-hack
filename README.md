@@ -202,23 +202,6 @@ Synthetic replay data is used for demo visualisation only, never as evaluation e
 Reported metrics come from held-out data under the purge-embargo split; production accuracy
 depends on environment-specific retraining.
 
-## How to contribute (team guide)
-
-### Who owns what
-
-| Member | Name | Owns | Works mostly in |
-| --- | --- | --- | --- |
-| 1 | Durgesh | Team lead: scope, architecture, integration decisions, final PPT story | `docs/`, reviews everywhere |
-| 2 | Adarsh | Frontend: login, dashboard, alerts list, alert detail, upload and admin pages | `frontend/`, `tests/frontend/` |
-| 3 | Shreya | Backend: APIs, auth, ingestion, windows, predictions, alerts, migrations | `backend/`, `database/`, `tests/backend/` |
-| 4 | Yash Bhanushali | AI/ML and data: datasets, features, forecasting labels, model, evaluation, inference | `ai/`, `tests/ml/`, `docs/research/` |
-| 5 | Kshitij | UI/UX, QA, documentation: wireframes, test cases, bug reports, user guide, demo notes | `docs/`, `tests/integration/`, `frontend/` (with Adarsh) |
-| 6 | Arnav | DevOps, integration, research, presentation: Docker, deployment, demo build, backup video | `deployment/`, `docker-compose.yml`, `.github/` |
-
-Backups so nothing lives with one person: Durgesh and Arnav can both run the full stack;
-Shreya and Yash both understand the inference contract; Adarsh and Kshitij both know the
-demo flow.
-
 ### First-time setup
 
 ```bash
