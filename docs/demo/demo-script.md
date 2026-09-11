@@ -49,3 +49,10 @@ label on current packets. Here are the top reasons."
 ## Demo accounts
 
 Created by `backend/scripts/seed_demo_users.py`. Change the passwords before any deployment.
+# Two-minute demo script
+
+1. Log in and open **Upload**. Upload a normalized flow CSV. Point out the accepted-flow count and background window building.
+2. Open **Dashboard**. Show the observed packet-volume chart sourced from persisted 60-second windows.
+3. With `WORLD_MODEL_CHECKPOINT` configured and at least ten windows present, show the five-minute risk timeline, peak stage, and ranked feature attributions.
+4. Explain that each forecast uses ten observed windows and rolls the learned network dynamics forward five times.
+5. Show the feature-extraction test and the evaluation command. State that the benchmark table comes from the chronological held-out CICIDS run.
