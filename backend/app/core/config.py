@@ -17,7 +17,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
     traffic_window_seconds: int = 60
-    frontend_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    frontend_origins: list[str] = [
+        "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173",
+        # Docker Desktop may proxy browser requests from its host gateway on macOS.
+        "http://192.168.65.1:3000",
+    ]
     max_upload_size_mb: int = 50
     rate_limit_enabled: bool = True
     login_rate_limit_per_minute: int = 10
