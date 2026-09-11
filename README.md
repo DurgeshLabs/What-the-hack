@@ -19,8 +19,8 @@ The **end-to-end demo product is complete**: authenticate → upload CSV traffic
 | Area | Included now | Important limitation |
 | --- | --- | --- |
 | Backend | JWT/RBAC, CSV ingestion, 37-feature window extraction, forecast endpoint, persisted alerts, PostgreSQL migrations | No live PCAP capture or streaming ingestion |
-| ML | PyTorch dynamics + risk-stage model, label/window pipeline, logistic-regression comparison utility, checkpoint loading | The checked-in project does **not** include a trained CICIDS checkpoint or real benchmark metrics |
-| Frontend | Login, upload, dashboard charts, MITRE timeline, explanations, alerts list/detail | It needs a locally mounted model artifact to show a forecast |
+| ML | PyTorch dynamics + risk-stage model, label/window pipeline, bundled checkpoint, logistic-regression comparison utility | The bundled replay has incomplete source timestamps, so its evaluation result is a demo smoke test, not a final benchmark |
+| Frontend | Login, upload, dashboard charts, MITRE timeline, explanations, alerts list/detail, sign-out handling | No live PCAP capture or streaming dashboard yet |
 | Deployment | Docker Compose stack, health checks, demo accounts | Development defaults only; change secrets for any shared deployment |
 
 ## Included demo artifacts
@@ -162,11 +162,45 @@ cd frontend && npm run build
 `tests/ml/test_tier5_adversarial_coverage.py` is ML work in progress and is skipped in CI
 until it collects.
 
+### Verify the bundled model
+
+After cloning, confirm the checkpoint loads before opening the demo:
+
+```bash
+docker compose exec backend python -c "from ai.inference.forecast_engine import load_model; _, checkpoint = load_model('/app/ai/models/world_model.pt'); print('checkpoint ready:', checkpoint['seq_len'], 'history windows')"
+```
+
+The expected output is `checkpoint ready: 10 history windows`. Docker Compose mounts
+this same artifact automatically at `/app/ai/models/world_model.pt`.
+
+### Common local-demo fixes
+
+| What you see | What to do |
+| --- | --- |
+| Browser cannot open `localhost` | Use `http://127.0.0.1:3000` and confirm `docker compose ps` shows both frontend and backend as running. |
+| `401 Unauthorized` after switching tabs | Sign out and sign in again. A backend restart invalidates existing development tokens. |
+| `403 Forbidden for /ingestion/upload` | Sign in with the **analyst** account, then rebuild/restart with `docker compose up --build` so the latest API permissions are running. |
+| `409 Conflict` while uploading | The same file is already being processed or was already accepted. Return to the dashboard; uploads are idempotent in the current build. |
+| Dashboard says `Artifact offline` | Run `git pull`, then `docker compose up --build`; use the verification command above to confirm the checkpoint is mounted. |
+| Forecast panel is empty | Upload the bundled replay, which produces 143 windows. The small sample CSV does not reach the model's 10-window history requirement. |
+
+### Dataset integrity
+
+The checked-in replay is intentionally small enough to clone and share. Its SHA-256 is
+`b513721d394229b03816d3010cf120f5f0f20ec7131821f54b9cb1d2331111ca`; verify it with:
+
+```bash
+shasum -a 256 ai/datasets/cleaned/cicids2017_archive_clean.csv
+```
+
+The checkpoint SHA-256 is
+`7dddd4f26842928241eef023c0b37593270bfc32bebd53129e734ca090b5819d`.
+
 ## Architecture
 
 ```text
 Traffic source / dataset → Ingestion API → raw_flows → Window builder → traffic_windows
-   → Feature extraction → window_features → Forecasting model (XGBoost, rule fallback)
+   → 37-feature extraction → window_features → PyTorch world model + risk-stage head
    → predictions → Alert engine + explanations → alerts → Dashboard APIs → Next.js dashboard
    → Analyst acknowledges → alert_events, audit_logs
 ```
@@ -203,12 +237,15 @@ database-aware health check, and a startup guard that refuses weak JWT secrets o
 development. Still future work for production: HTTPS termination, Redis-backed rate
 limits across workers, and secret rotation.
 
-## Datasets and honesty
+## Dataset, model, and evaluation honesty
 
-Public benchmarks only: CICIDS2017 (primary), UNSW-NB15, CTU-13, NSL-KDD as a baseline.
-Synthetic replay data is used for demo visualisation only, never as evaluation evidence.
-Reported metrics come from held-out data under the purge-embargo split; production accuracy
-depends on environment-specific retraining.
+The bundled replay is CICIDS2017-derived and includes attack labels for local training
+and demonstration. It is not the original official timestamped capture export, so its
+chronological final test partition can be class-skewed. Do not claim its local 100% binary
+F1 smoke-test result as final research accuracy. For a defensible final benchmark, train
+and evaluate with original timestamped CICIDS2017 files using a split where both benign and
+attack windows appear in each test fold. Synthetic replay data is for UI verification only,
+never as accuracy evidence.
 
 ### First-time setup
 
