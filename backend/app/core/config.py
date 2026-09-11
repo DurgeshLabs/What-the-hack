@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     login_rate_limit_per_minute: int = 10
     upload_rate_limit_per_minute: int = 10
+    world_model_checkpoint: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

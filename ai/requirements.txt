@@ -1,0 +1,3 @@
+# Training/inference extras (the backend uses its rule fallback without them).
+numpy>=1.26
+torch>=2.2

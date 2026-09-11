@@ -7,7 +7,7 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://loca
 
 export type HealthResponse = Record<string, unknown>;
 
-export type RiskLevel = "low" | "medium" | "high";
+export type RiskLevel = "low" | "medium" | "high" | "critical";
 
 export interface AlertCard {
   id: string;
@@ -44,6 +44,15 @@ export function getHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/health");
 }
 
+export async function getAlerts() {
+  return [
+    { id: 1, host: "10.0.0.5", severity: "high", score: 82, time: "2 min ago" },
+    { id: 2, host: "10.0.0.9", severity: "medium", score: 45, time: "10 min ago" },
+    { id: 3, host: "10.0.0.14", severity: "critical", score: 96, time: "1 min ago" },
+    { id: 4, host: "10.0.0.22", severity: "low", score: 12, time: "30 min ago" },
+  ];
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -63,6 +72,9 @@ export interface TokenResponse {
 export function login(email: string, password: string): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 }
+
+export function saveSession(session: TokenResponse) { localStorage.setItem("wth_session", JSON.stringify(session)); }
+export function getSession(): TokenResponse | null { const raw = typeof window === "undefined" ? null : localStorage.getItem("wth_session"); return raw ? JSON.parse(raw) as TokenResponse : null; }
 
 export function refresh(refreshToken: string): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/refresh", { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) });
@@ -97,4 +109,61 @@ export function listWindows(token: string, trafficSourceId: string, after?: stri
   const params = new URLSearchParams({ traffic_source_id: trafficSourceId, limit: String(limit) });
   if (after) params.set("after", after);
   return request<TrafficWindowListResponse>(`/windows?${params.toString()}`, {}, token);
+}
+
+export async function getDashboardSummary() {
+  return {
+    riskCounts: { low: 12, medium: 7, high: 3, critical: 1 },
+    trafficTrend: [
+      { time: "10:00", value: 20 },
+      { time: "10:05", value: 25 },
+      { time: "10:10", value: 22 },
+      { time: "10:15", value: 40 },
+      { time: "10:20", value: 65 },
+      { time: "10:25", value: 90 },
+    ],
+    topHosts: [
+      { host: "10.0.0.14", score: 96 },
+      { host: "10.0.0.5", score: 82 },
+      { host: "10.0.0.9", score: 45 },
+    ],
+  };
+}
+
+export async function getAlertDetail(id: string) {
+  // Fake detail data — keyed by id for now
+  const details: Record<string, any> = {
+    "1": {
+      id: 1,
+      host: "10.0.0.5",
+      severity: "high",
+      score: 82,
+      predictedAttack: "Brute-force login",
+      forecastHorizon: "Next 10 minutes",
+      confidence: 0.87,
+      contributingFactors: [
+        "Failed login burst increased 4.2x",
+        "Unusual login time (03:00–04:00 local)",
+        "Requests from 3 new source IPs",
+      ],
+      recommendedActions: [
+        "Temporarily lock account after 5 failed attempts",
+        "Flag source IPs for review",
+      ],
+      trafficBefore: [10, 12, 11, 14, 40, 65],
+      trafficAfter: [65, 70, 68, 72, 75, 78],
+    },
+  };
+
+  return details[id] ?? details["1"]; // fallback so every id shows something for now
+}
+
+export async function startReplay(fileName: string) {
+  // Fake job trigger — pretend it starts processing
+  return { jobId: "job-001", status: "pending" };
+}
+
+export async function getJobStatus(jobId: string) {
+  // Fake status check — normally you'd poll this repeatedly
+  return { jobId, status: "running", progress: 45 };
 }
