@@ -18,6 +18,8 @@ The trainer accepts normalized upload CSVs and raw CICIDS2017 CSVs. The dataset 
 
 The evaluator makes a chronological train/test split. It trains logistic regression as the benchmark baseline, then measures the world model on the same held-out period. It prints precision, recall, F1, false-positive rate, and support. Results must be generated from a real dataset and included in the final submission; this project does not claim metrics before that run.
 
+`docs/research/synthetic-validation-results.json` records a successful local smoke run. Its five-window synthetic test set is deliberately too small for a benchmark claim.
+
 ## Serving path
 
 The backend exposes `/api/v1/analytics/overview` for persisted traffic and features. `/api/v1/analytics/forecast` loads the artifact named by `WORLD_MODEL_CHECKPOINT`, fetches the latest ten feature windows for the selected source, and returns five risks, stages, and gradient attributions. If the artifact, dependencies, or required history are unavailable, it returns a clear HTTP error rather than a fabricated forecast. The dashboard renders only API data and retains empty states for unavailable data.

@@ -111,7 +111,7 @@ def build_labeled_windows(csv_path: str | Path, window_seconds: int = 60) -> Lab
     content = Path(csv_path).read_text(encoding="utf-8-sig")
     # CICIDS2017's raw CSV uses columns such as "Source IP" and "Timestamp".
     # Reuse the project mapper rather than maintaining a second set of conversions.
-    headers = set(next(csv.reader([content.splitlines()[0]]), []))
+    headers = {header.strip() for header in next(csv.reader([content.splitlines()[0]]), [])}
     if "timestamp" not in headers and "Timestamp" in headers:
         from ai.datasets.download_cicids2017 import map_cicids_to_raw_flows
         import pandas as pd
