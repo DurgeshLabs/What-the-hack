@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy import insert, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_admin, require_viewer
+from app.api.deps import require_analyst, require_viewer
 from app.core.config import settings
 from app.core.ratelimit import RateLimiter, enforce
 from app.db.session import get_db
@@ -27,7 +27,7 @@ def upload_csv(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     source_name: str | None = Form(default=None, max_length=160),
-    user: User = Depends(require_admin),
+    user: User = Depends(require_analyst),
     db: Session = Depends(get_db),
 ) -> IngestionJob:
     # Plain `def`: FastAPI runs it in a worker thread, so parsing and database work never
