@@ -54,3 +54,21 @@ print(result)
 
 This confirms the complete model path: checkpoint loading, ten-window history,
 five-step forecast, MITRE stage output, and feature explanations.
+
+## 5. Docker demo
+
+Put the trained artifact at `ai/models/world_model.pt` locally, then set this in
+the repository-root `.env` before starting Compose:
+
+```bash
+WORLD_MODEL_CHECKPOINT=/app/ai/models/world_model.pt
+docker compose up --build
+```
+
+The backend image installs `ai/requirements.txt`. Because model artifacts stay out
+of Git, copy the artifact into the running backend container for a local demo:
+
+```bash
+docker cp ai/models/world_model.pt what-the-hack-backend:/app/ai/models/world_model.pt
+docker compose restart backend
+```

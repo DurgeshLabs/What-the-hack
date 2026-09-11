@@ -25,7 +25,7 @@ def forecast(model: WorldModel, checkpoint: dict[str, Any], history: Sequence[di
     if len(history) != checkpoint["seq_len"]: raise ValueError(f"Expected exactly {checkpoint['seq_len']} history windows.")
     rows = [[validate_features(window)[name] for name in FEATURE_NAMES] for window in history]
     mean, std = checkpoint["normalisation"]["mean"], checkpoint["normalisation"]["std"]
-    observed = torch.tensor([[(value - mean[index]) / (std[index] if std[index] >= 1e-6 else 1.0) for index, value in enumerate(row)] for row in rows], dtype=torch.float32)
+    observed = torch.tensor([[[(value - mean[index]) / (std[index] if std[index] >= 1e-6 else 1.0) for index, value in enumerate(row)] for row in rows]], dtype=torch.float32)
     with torch.no_grad(): output = model.forecast(observed, k_steps)
     risks = output["risk_timeline"][0].tolist(); stage_ids = output["stage_logits"][0].argmax(dim=-1).tolist()
     stages = [MITRE_STAGES[index] for index in stage_ids]; peak = max(range(len(risks)), key=risks.__getitem__)
@@ -36,4 +36,4 @@ def explain_step(model: WorldModel, history: torch.Tensor, step_idx: int, k_step
     observed = history.detach().clone().requires_grad_(True); model.zero_grad(set_to_none=True)
     model.forecast(observed, k_steps)["risk_timeline"][0, step_idx].backward()
     scores = (observed.grad[0] * observed[0]).abs().sum(dim=0)
-    return [{"feature": FEATURE_NAMES[index], "attribution": float(scores[index])} for index in torch.argsort(scores, descending=True)[:top_n].tolist()]
+    return [{"feature": FEATURE_NAMES[index], "attribution": float(scores[index].detach())} for index in torch.argsort(scores, descending=True)[:top_n].tolist()]

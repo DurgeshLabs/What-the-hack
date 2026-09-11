@@ -29,9 +29,12 @@ services:
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-["http://localhost:3000","http://localhost:5173"]}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-50}
       TRAFFIC_WINDOW_SECONDS: ${TRAFFIC_WINDOW_SECONDS:-60}
+      WORLD_MODEL_CHECKPOINT: ${WORLD_MODEL_CHECKPOINT:-}
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
+    volumes:
+      - ./ai/models:/app/ai/models:ro
     depends_on:
       db:
         condition: service_healthy
