@@ -18,7 +18,9 @@ The trainer accepts normalized upload CSVs and raw CICIDS2017 CSVs. The dataset 
 
 The evaluator makes a chronological train/test split. It trains logistic regression as the benchmark baseline, then measures the world model on the same held-out period. It prints precision, recall, F1, false-positive rate, and support. Results must be generated from a real dataset and included in the final submission; this project does not claim metrics before that run.
 
-`docs/research/synthetic-validation-results.json` records a successful local smoke run. Its five-window synthetic test set is deliberately too small for a benchmark claim.
+Synthetic smoke-test metrics are intentionally not committed as benchmark evidence. The bundled
+replay is used to verify the complete local prediction path; final metrics must come from a
+timestamped, class-balanced held-out evaluation as described in the root README.
 
 ## Serving path
 
