@@ -77,6 +77,22 @@ cp .env.example .env
 docker compose up --build
 ```
 
+### If you downloaded a ZIP instead of cloning
+
+Extract the current GitHub ZIP, open Terminal in the extracted `What-the-hack-main`
+folder, then run the same two commands:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The ZIP includes the cleaned replay and the trained checkpoint, so Git and the original
+large CICIDS archive are not required. If Docker reports that ports `3000`, `5432`, or
+`8000` are already in use, another local copy of the demo is running. Stop that copy from
+its own project folder with `docker compose down`, then run the command above again. Do
+not use `docker compose down -v` unless you intend to remove its local database.
+
 | Service | URL |
 | --- | --- |
 | Frontend | http://127.0.0.1:3000 |
