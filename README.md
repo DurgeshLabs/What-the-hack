@@ -1,7 +1,7 @@
 # What the Hack — AI-based Network Attack Forecasting
 
 **SIH 2026 · Problem statement SIH26153 · National Technical Research Organisation (NTRO)**
-**Theme: Blockchain & Cybersecurity · Category: Software · Team Cogitate**
+**Theme: Blockchain & Cybersecurity · Category: Software**
 
 An explainable early-warning system that forecasts likely cyber attacks from network-traffic
 behaviour **before they fully materialise**. It groups recent traffic into short windows,
