@@ -152,6 +152,46 @@ Replace `en0` with the interface confirmed by `networksetup -listallhardwareport
 Docker runs the application and bridge; Zeek stays on the host because Docker Desktop
 cannot observe the Mac's physical Wi-Fi interface directly.
 
+### Live-score interpretation and false positives
+
+Do not treat the dashboard percentage as a verdict that a PC, Wi-Fi connection, IP address,
+or website is malicious. It is the current model's **attack-likeness risk score** for the
+next five minutes, not a calibrated probability and not a confirmed incident. A healthy
+personal computer can score highly because its real traffic distribution (software updates,
+streaming, cloud synchronization, DNS, encrypted connections, or a busy shared Wi-Fi) differs
+from the controlled CICIDS2017 lab traffic used to train the bundled checkpoint. That is a
+normal form of dataset shift and must be investigated as a possible false positive.
+
+For a demo, say: *“The system raised an early-warning score because these traffic features
+were unlike its training baseline. We validate it with destination, endpoint, and identity
+evidence before calling it an incident.”* The dashboard shows the contributing feature values
+and IP/port evidence for this validation. It intentionally does **not** call an IP address or
+website malicious from flow statistics alone.
+
+#### How to improve the model responsibly
+
+1. **Keep CICIDS2017 as the starting training set**, but use its original timestamped files,
+   not only the bundled compact replay. It provides labelled benign traffic plus brute force,
+   DoS/DDoS, web attack, infiltration, botnet, and scan scenarios.
+2. **Evaluate on a different dataset before making claims.** Use CSE-CIC-IDS2018 as an
+   external test set after mapping it into this repository's 37-feature contract. Do not mix
+   the same capture into both training and test partitions.
+3. **Collect authorised benign Zeek metadata from the target environment** (for example one
+   to two weeks of normal home/lab activity), remove or protect personal identifiers, and use
+   it to measure the false-positive rate and tune an alert threshold. Do not fine-tune the
+   whole attack classifier on benign-only data: that would make it forget attack classes.
+4. **Calibrate and gate alerts.** Fit Platt scaling or isotonic calibration on a labelled
+   validation split, choose a threshold for an agreed false-positive rate, and display
+   “review” rather than “critical” when the model is out of distribution.
+5. **Add domain and endpoint corroboration.** Enrich permitted live logs with DNS/TLS-SNI,
+   endpoint process and authentication evidence; retain human analyst review before response.
+
+Recommended public sources: [official CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html),
+[official CSE-CIC-IDS2018](https://www.unb.ca/cic/datasets/ids-2018.html), and
+[ToN_IoT](https://research.unsw.edu.au/projects/toniot-datasets) only when the intended
+deployment is IoT/industrial traffic. Each non-CIC dataset needs an explicit normalizer and
+label mapping before it can train this model; do not upload it blindly and expect valid scores.
+
 ### Reading the attack-stage forecast
 
 The dashboard deliberately shows one **five-minute stage verdict** rather than repeating the
