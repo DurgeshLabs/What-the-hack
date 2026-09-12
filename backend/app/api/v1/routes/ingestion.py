@@ -32,7 +32,6 @@ def upload_csv(
 ) -> IngestionJob:
     # Plain `def`: FastAPI runs it in a worker thread, so parsing and database work never
     # block the event loop for other requests.
-    enforce(upload_limiter, f"user:{user.id}", "upload", settings.rate_limit_enabled)
     filename = file.filename or "upload.csv"
     if Path(filename).suffix.lower() != ".csv" or file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only CSV files are accepted")
@@ -71,6 +70,9 @@ def upload_csv(
         )
         if duplicate is not None:
             return duplicate
+    # Count only genuinely new imports. Retrying the same completed file is idempotent
+    # and should not lock an analyst out of the dashboard during a demo.
+    enforce(upload_limiter, f"user:{user.id}", "upload", settings.rate_limit_enabled)
     job = IngestionJob(
         traffic_source_id=source.id, requested_by_user_id=user.id, original_filename=filename,
         content_hash=content_hash, status=IngestionStatus.RUNNING,
