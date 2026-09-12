@@ -66,9 +66,21 @@ export function login(email: string, password: string): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 }
 
-export function saveSession(session: TokenResponse) { localStorage.setItem("wth_session", JSON.stringify(session)); }
+function notifySessionChange() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wth-session-changed"));
+}
+
+export function saveSession(session: TokenResponse) {
+  localStorage.setItem("wth_session", JSON.stringify(session));
+  notifySessionChange();
+}
 export function getSession(): TokenResponse | null { const raw = typeof window === "undefined" ? null : localStorage.getItem("wth_session"); try { return raw ? JSON.parse(raw) as TokenResponse : null; } catch { return null; } }
-export function clearSession() { if (typeof window !== "undefined") localStorage.removeItem("wth_session"); }
+export function clearSession() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("wth_session");
+    notifySessionChange();
+  }
+}
 export function isUnauthorized(error: unknown) { return error instanceof Error && error.message.startsWith("401 "); }
 
 export function refresh(refreshToken: string): Promise<TokenResponse> {

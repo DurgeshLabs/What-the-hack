@@ -2,11 +2,41 @@
 
 This optional demo mode turns the project from a CSV replay into a local live-telemetry pipeline:
 
-`authorised network interface → Zeek conn.log (JSON metadata) → local adapter → FastAPI → 60-second features → LSTM forecast → dashboard`
+`authorised network interface → Zeek conn.log (JSON metadata) → Docker live adapter → FastAPI → 60-second features → LSTM forecast → dashboard`
 
 The sensor reads **connection metadata only**: time, IP addresses, ports, protocol, packets, bytes, duration and connection state. It does not read or upload packet payloads. Use it only on an interface and network you own or are explicitly authorised to monitor.
 
-## 1. Start the application
+## Fastest macOS setup: one terminal
+
+Install Zeek once:
+
+```bash
+brew install zeek
+```
+
+Identify the interface you are authorised to monitor:
+
+```bash
+networksetup -listallhardwareports
+```
+
+Then from the project root, substitute the confirmed interface (often `en0` for a
+personal Wi-Fi connection) and run:
+
+```bash
+WTH_ANALYST_PASSWORD='AnalystPass123!' bash deployment/scripts/start_live_demo.sh en0
+```
+
+The script starts host Zeek plus Docker Compose (database, backend, frontend and
+the live adapter) and creates the local demo accounts. It asks for your macOS password
+only to let Zeek observe the selected authorised interface. `Ctrl-C` stops the adapter
+and Zeek; the regular Docker application remains available until `docker compose down`.
+
+On macOS, a Docker container cannot directly observe the Mac's physical Wi-Fi interface,
+so Zeek remains a host process while Docker runs everything else. This is why the one
+terminal script is the correct local setup rather than a privileged packet-capture container.
+
+## Manual setup (if you prefer separate processes)
 
 From the project root:
 
@@ -16,7 +46,7 @@ docker compose up --build
 
 Open `http://127.0.0.1:3000`, sign in as an analyst, and leave the stack running.
 
-## 2. Identify your local interface
+### 1. Start the application
 
 On macOS:
 
@@ -26,7 +56,7 @@ networksetup -listallhardwareports
 
 For a normal Wi-Fi-only personal demo this is commonly `en0`; verify the output before using it.
 
-## 3. Start Zeek JSON connection logging
+### 2. Start Zeek JSON connection logging
 
 In a second terminal, create a dedicated log folder and start Zeek on the authorised interface:
 
@@ -38,18 +68,19 @@ sudo zeek -i en0 LogAscii::use_json=T
 
 This writes `~/zeek-live/conn.log`. Browsing a site or running a DNS lookup on your own machine will generate connection events. Stop Zeek with `Ctrl-C`.
 
-## 4. Start the local bridge
+### 3. Start the Docker live adapter
 
 In a third terminal, from the project root:
 
 ```bash
 export WTH_ANALYST_PASSWORD='your analyst password'
-python3 -m ai.ingestion.zeek_live_adapter --log ~/zeek-live/conn.log
+export ZEEK_LOG_DIR="$HOME/zeek-live"
+docker compose -f docker-compose.yml -f docker-compose.live.yml --profile live up --build live-adapter
 ```
 
 The bridge logs in using the analyst account, tails only new JSON connection records, batches up to 100 events, and refreshes its access token automatically when necessary. It prints the source and job IDs after every accepted batch.
 
-## 5. Open the live dashboard
+### 4. Open the live dashboard
 
 In the web app choose **Live sensor** → **Refresh** → **Open dashboard**. The existing dashboard then displays live-built 60-second windows, the five-minute risk projection, MITRE-aligned stage category, and feature explanation.
 

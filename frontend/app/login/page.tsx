@@ -32,7 +32,7 @@ export default function LoginPage() {
           Attack Forecasting — Login
         </h1>
 
-        <label className="mb-1 block text-sm text-gray-600">Username</label>
+        <label className="mb-1 block text-sm text-gray-600">Email</label>
         <input
           className="mb-4 w-full rounded border border-gray-300 p-2"
           value={username}
@@ -53,7 +53,7 @@ export default function LoginPage() {
           type="submit"
           className="w-full rounded bg-blue-600 py-2 text-white hover:bg-blue-700"
         >
-          Log in
+          Sign in
         </button>
       </form>
     </div>

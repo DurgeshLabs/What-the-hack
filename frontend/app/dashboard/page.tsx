@@ -45,6 +45,13 @@ function Line({ values, color = "#6366f1" }: { values: number[]; color?: string 
   );
 }
 
+function Chart({ values, color, format, startLabel, endLabel }: { values: number[]; color: string; format: (value: number) => string; startLabel: string; endLabel: string }) {
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const middle = min + (max - min) / 2;
+  return <div className="mt-4 grid grid-cols-[auto_1fr] gap-3"><div className="flex h-52 flex-col justify-between pb-1 text-right text-[11px] tabular-nums text-slate-400"><span>{format(max)}</span><span>{format(middle)}</span><span>{format(min)}</span></div><div><Line values={values} color={color} /><div className="flex justify-between text-xs text-slate-400"><span>{startLabel}</span><span>{endLabel}</span></div></div></div>;
+}
+
 export default function DashboardPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [forecast, setForecast] = useState<Forecast | null>(null);
@@ -90,6 +97,8 @@ export default function DashboardPage() {
   const peak = forecast?.risk_timeline.reduce((current, point) => current.risk_score > point.risk_score ? current : point);
   const stageTransitions = forecast?.risk_timeline.filter((point, index, timeline) => index === 0 || point.stage !== timeline[index - 1].stage) ?? [];
   const projectedStage = peak?.stage ?? forecast?.risk_timeline[0]?.stage ?? "Unknown";
+  const latestTraffic = traffic.at(-1);
+  const peakTraffic = traffic.reduce((largest, point) => Math.max(largest, point.packets), 0);
 
   return (
     <div className="space-y-6">
@@ -112,15 +121,14 @@ export default function DashboardPage() {
       <section className="grid gap-6 lg:grid-cols-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-3">
           <div className="flex justify-between">
-            <div><h3 className="font-semibold text-slate-900">Observed traffic volume</h3><p className="text-sm text-slate-500">Packets per 60-second window</p></div>
+            <div><h3 className="font-semibold text-slate-900">Observed traffic volume</h3><p className="text-sm text-slate-500">Packets per 60-second window · latest {latestTraffic?.packets.toLocaleString() ?? "0"} · peak {peakTraffic.toLocaleString()}</p></div>
             <span className="text-sm text-slate-500">{traffic.length} windows</span>
           </div>
-          <Line values={traffic.map((point) => point.packets)} />
-          <div className="flex justify-between text-xs text-slate-400"><span>{traffic[0] ? new Date(traffic[0].timestamp).toLocaleTimeString() : ""}</span><span>Now</span></div>
+          <Chart values={traffic.map((point) => point.packets)} color="#6366f1" format={(value) => `${Math.round(value).toLocaleString()}`} startLabel={traffic[0] ? new Date(traffic[0].timestamp).toLocaleTimeString() : ""} endLabel="Now" />
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
           <h3 className="font-semibold text-slate-900">Forecasted risk</h3><p className="mb-4 text-sm text-slate-500">Five-minute model projection</p>
-          {forecast ? <><Line values={forecast.risk_timeline.map((point) => point.risk_score * 100)} color="#ef4444" /><div className="flex items-center justify-between"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${badge[forecast.peak_risk_level]}`}>{forecast.peak_risk_level.toUpperCase()}</span><button onClick={saveAlert} disabled={saving} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save as alert"}</button></div></> : <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">A forecast appears once the model artifact is available and at least 10 windows are built.</p>}
+          {forecast ? <><Chart values={forecast.risk_timeline.map((point) => point.risk_score * 100)} color="#ef4444" format={(value) => `${Math.round(value)}%`} startLabel="+1 min" endLabel="+5 min" /><div className="flex items-center justify-between"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${badge[forecast.peak_risk_level]}`}>{forecast.peak_risk_level.toUpperCase()} · {Math.round((peak?.risk_score ?? 0) * 100)}%</span><button onClick={saveAlert} disabled={saving} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save as alert"}</button></div></> : <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">A forecast appears once the model artifact is available and at least 10 windows are built.</p>}
         </div>
       </section>
 

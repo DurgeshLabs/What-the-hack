@@ -142,6 +142,16 @@ packet payloads. Full setup, safety boundary, and troubleshooting are in
 [the live Zeek runbook](docs/demo/live-zeek-ingestion.md). Once the bridge is sending,
 use **Live sensor** in the navigation to select its dashboard source.
 
+On macOS, the quickest authorised demo is one terminal after Zeek is installed:
+
+```bash
+WTH_ANALYST_PASSWORD='AnalystPass123!' bash deployment/scripts/start_live_demo.sh en0
+```
+
+Replace `en0` with the interface confirmed by `networksetup -listallhardwareports`.
+Docker runs the application and bridge; Zeek stays on the host because Docker Desktop
+cannot observe the Mac's physical Wi-Fi interface directly.
+
 ### Reading the attack-stage forecast
 
 The dashboard deliberately shows one **five-minute stage verdict** rather than repeating the

@@ -1,14 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { clearSession, getSession, logout } from "@/lib/api";
+import { TokenResponse, clearSession, getSession, logout } from "@/lib/api";
 
 export function SessionNav() {
-  // Re-evaluate local session data whenever Next.js changes route. This keeps the
-  // visible action correct immediately after the login page stores a new token.
-  usePathname();
-  const session = getSession();
+  const pathname = usePathname();
+  const [session, setSession] = useState<TokenResponse | null>(null);
+
+  // Session storage is browser-only. Keeping it in state and listening for our
+  // explicit event prevents a stale label after login, logout, or route changes.
+  useEffect(() => {
+    const syncSession = () => setSession(getSession());
+    syncSession();
+    window.addEventListener("wth-session-changed", syncSession);
+    return () => window.removeEventListener("wth-session-changed", syncSession);
+  }, [pathname]);
 
   async function signOut() {
     try {
@@ -16,7 +24,7 @@ export function SessionNav() {
     } finally {
       clearSession();
       localStorage.removeItem("wth_source_id");
-      window.location.href = "/login";
+      window.location.assign("/login");
     }
   }
 
