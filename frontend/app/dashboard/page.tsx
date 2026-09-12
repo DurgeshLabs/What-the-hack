@@ -28,6 +28,46 @@ const mitreStages = [
   { stage: "Exfiltration / Impact", source: "DoS / DDoS harmful-impact bucket", color: "bg-rose-500" },
 ];
 
+const featureDetails: Record<string, { label: string; why: string }> = {
+  flow_count: { label: "Connection volume", why: "An unusual number of separate network connections occurred in one minute." },
+  packet_count: { label: "Packet volume", why: "The number of packets differed from the recent traffic pattern." },
+  byte_count: { label: "Data volume", why: "The amount of transferred data differed from the recent traffic pattern." },
+  unique_dst_ips: { label: "Destination diversity", why: "Connections reached an unusual number of different destination IP addresses." },
+  unique_dst_ports: { label: "Destination-port diversity", why: "Connections touched an unusual number of ports; this can occur during service discovery or scanning." },
+  dst_port_entropy: { label: "Port spread", why: "Traffic was distributed across ports more broadly than the recent baseline." },
+  protocol_udp_ratio: { label: "UDP share", why: "The proportion of UDP traffic changed from the recent pattern." },
+  protocol_tcp_ratio: { label: "TCP share", why: "The proportion of TCP traffic changed from the recent pattern." },
+  syn_ratio: { label: "Connection-start requests", why: "A higher share of connections began with SYN packets." },
+  syn_ack_ratio: { label: "Handshake imbalance", why: "Connection-start requests and acknowledgements were imbalanced." },
+  failed_conn_ratio: { label: "Failed connections", why: "More connections ended without a normal handshake or were reset." },
+  rst_ratio: { label: "Connection resets", why: "A larger share of traffic contained reset signals." },
+  retry_rate: { label: "Repeated connection attempts", why: "The same source–destination–port combination was retried more often." },
+  short_flow_ratio: { label: "Short-lived connections", why: "A larger share of flows lasted under 100 milliseconds." },
+  packet_burst_score: { label: "Packet burst", why: "Packet volume was elevated compared with the preceding three minutes." },
+  syn_burst_score: { label: "SYN burst", why: "Connection-start activity was elevated compared with the preceding three minutes." },
+  delta_packet_rate: { label: "Packet-rate change", why: "Packet rate changed sharply compared with the prior minute." },
+  delta_failed_conn_ratio: { label: "Failure-rate change", why: "The failed-connection rate changed sharply compared with the prior minute." },
+  delta_unique_dst_ports: { label: "Port-diversity change", why: "The number of destination ports changed sharply compared with the prior minute." },
+};
+
+const mitreExplanation: Record<string, string> = {
+  "Reconnaissance": "MITRE ATT&CK tactic alignment: reconnaissance-like network discovery behaviour. This is not proof of a specific ATT&CK technique.",
+  "Initial Access": "MITRE ATT&CK tactic alignment: an initial-access / credential-attempt pattern. It is a coarse category, not a claim that credentials were compromised.",
+  "Lateral Movement": "MITRE ATT&CK tactic alignment: movement between systems may be developing. Validate with endpoint and identity telemetry before acting.",
+  "Command & Control": "MITRE ATT&CK tactic alignment: traffic resembles a possible command-and-control communication pattern. Validate the destination and process ownership.",
+  "Exfiltration / Impact": "MITRE ATT&CK tactic alignment: late-stage high-impact behaviour is forecast. It does not prove data was exfiltrated; inspect the affected flows and endpoints.",
+  "Benign": "The model's most likely coarse class is benign for this forecast window.",
+};
+
+function formatFeatureValue(feature: string, value: number | undefined) {
+  if (value === undefined) return "value unavailable";
+  if (feature.includes("ratio")) return `${Math.round(value * 100)}%`;
+  if (feature.includes("entropy")) return `${value.toFixed(2)} bits`;
+  if (feature.includes("rate")) return `${value.toFixed(2)} / sec`;
+  if (feature.includes("bytes") || feature.includes("length")) return `${Math.round(value).toLocaleString()} bytes`;
+  return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2);
+}
+
 function Line({ values, color = "#6366f1" }: { values: number[]; color?: string }) {
   if (!values.length) return null;
   const max = Math.max(...values, 1);
@@ -146,8 +186,14 @@ export default function DashboardPage() {
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="font-semibold text-slate-900">What influenced this forecast</h3>
-          <div className="mt-4 space-y-3">{forecast.top_feature_contributors.slice(0, 5).map((item) => <div key={item.feature}><div className="flex justify-between text-sm"><span className="text-slate-700">{item.feature.replaceAll("_", " ")}</span><span className="text-slate-500">{Math.round(item.contribution * 100)}%</span></div><div className="mt-1 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${Math.max(3, item.contribution * 100)}%` }} /></div></div>)}</div>
+          <p className="mt-1 text-sm text-slate-500">These are the model&apos;s strongest input signals, not proof that any one signal caused an attack.</p>
+          <div className="mt-4 space-y-4">{forecast.top_feature_contributors.slice(0, 5).map((item) => <div key={item.feature}><div className="flex justify-between gap-3 text-sm"><span className="font-medium text-slate-800">{featureDetails[item.feature]?.label ?? item.feature.replaceAll("_", " ")}</span><span className="shrink-0 text-slate-500">{Math.round(item.contribution * 100)}% influence</span></div><p className="mt-1 text-xs leading-5 text-slate-500">Current value: {formatFeatureValue(item.feature, overview.latest_features?.[item.feature])}. {featureDetails[item.feature]?.why ?? "This behaviour differed from the learned traffic pattern."}</p><div className="mt-1.5 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${Math.max(3, item.contribution * 100)}%` }} /></div></div>)}</div>
         </div>
+      </section>}
+
+      {forecast && <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-6 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-700">Plain-language reading</p><h3 className="mt-1 text-xl font-semibold text-slate-900">Why {Math.round((peak?.risk_score ?? 0) * 100)}% risk?</h3><p className="mt-3 text-sm leading-6 text-slate-700">The model compares the latest ten one-minute traffic windows with patterns learned during training. It forecasts a <strong>chance of attack-like behaviour in the next five minutes</strong>; it does not say an attack has already succeeded or that a website is malicious.</p><p className="mt-3 text-sm leading-6 text-slate-700">{mitreExplanation[projectedStage] ?? "The stage is a coarse MITRE-aligned category and needs analyst validation."}</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[.16em] text-indigo-600">Destination evidence</p><h3 className="mt-1 text-xl font-semibold text-slate-900">Where was the recent traffic going?</h3><p className="mt-2 text-sm leading-6 text-slate-500">These are the busiest destinations in the latest one-minute window. An IP address or port is evidence to investigate—not a statement that the destination is harmful.</p><div className="mt-4 space-y-2">{overview.latest_destinations.length ? overview.latest_destinations.map((destination) => <div key={`${destination.destination_ip}-${destination.destination_port}-${destination.protocol}`} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-3 text-sm"><div><p className="font-mono font-medium text-slate-800">{destination.destination_ip}{destination.destination_port ? `:${destination.destination_port}` : ""}</p><p className="text-xs text-slate-500">{destination.protocol} · {destination.flows} flows · {destination.packets.toLocaleString()} packets</p></div><span className="text-xs text-slate-500">{destination.bytes.toLocaleString()} B</span></div>) : <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">No destination metadata is available for this window.</p>}</div><p className="mt-4 text-xs leading-5 text-slate-500">Website names are not inferred from IP addresses. Enable DNS/TLS-SNI enrichment in a future sensor version to show a verified domain name; do not label an IP as a risky website from this model alone.</p></div>
       </section>}
 
       <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-6 shadow-sm">

@@ -126,6 +126,7 @@ export interface Overview {
   traffic_source_id: string; window_count: number; model_ready: boolean;
   traffic: { timestamp: string; packets: number; bytes: number; flows: number }[];
   latest_features: Record<string, number> | null;
+  latest_destinations: { destination_ip: string; destination_port: number | null; protocol: string; flows: number; packets: number; bytes: number }[];
 }
 export interface Forecast {
   observed_until: string; peak_risk_level: RiskLevel; peak_risk_stage: string | null;

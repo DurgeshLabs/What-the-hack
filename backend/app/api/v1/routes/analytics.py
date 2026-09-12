@@ -5,13 +5,13 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_analyst, require_viewer
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.network import Alert, AlertSeverity, AlertStatus, Prediction, RiskLevel, TrafficWindow, User, WindowFeature, WindowScope
+from app.models.network import Alert, AlertSeverity, AlertStatus, Prediction, RawFlow, RiskLevel, TrafficWindow, User, WindowFeature, WindowScope
 
 router = APIRouter(prefix="/analytics")
 
@@ -42,6 +42,31 @@ def _run_forecast(db: Session, source_id: UUID) -> tuple[dict, TrafficWindow]:
     return result, rows[-1][0]
 
 
+def _latest_destinations(db: Session, source_id: UUID, window: TrafficWindow | None) -> list[dict]:
+    """Return observable destination evidence—not a claim that any destination is malicious."""
+    if window is None:
+        return []
+    rows = db.execute(
+        select(
+            RawFlow.dst_ip, RawFlow.dst_port, RawFlow.protocol,
+            func.count(RawFlow.id).label("flows"), func.sum(RawFlow.packet_count).label("packets"),
+            func.sum(RawFlow.byte_count).label("bytes"),
+        )
+        .where(
+            RawFlow.traffic_source_id == source_id,
+            RawFlow.observed_at >= window.window_start,
+            RawFlow.observed_at < window.window_end,
+        )
+        .group_by(RawFlow.dst_ip, RawFlow.dst_port, RawFlow.protocol)
+        .order_by(func.sum(RawFlow.byte_count).desc())
+        .limit(5)
+    ).all()
+    return [
+        {"destination_ip": ip, "destination_port": port, "protocol": protocol, "flows": int(flows), "packets": int(packets or 0), "bytes": int(bytes or 0)}
+        for ip, port, protocol, flows, packets, bytes in rows
+    ]
+
+
 @router.get("/overview")
 def overview(
     traffic_source_id: UUID = Query(...), user: User = Depends(require_viewer), db: Session = Depends(get_db)
@@ -54,6 +79,7 @@ def overview(
         "model_ready": checkpoint_ready,
         "traffic": [{"timestamp": window.window_end.isoformat(), "packets": window.packet_count, "bytes": window.byte_count, "flows": window.flow_count} for window, _ in rows],
         "latest_features": rows[-1][1].features_json if rows else None,
+        "latest_destinations": _latest_destinations(db, traffic_source_id, rows[-1][0] if rows else None),
     }
 
 
