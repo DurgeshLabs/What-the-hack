@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: what-the-hack-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-what_the_hack}
@@ -21,7 +20,6 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: what-the-hack-backend
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://what_the_hack:what_the_hack@db:5432/what_the_hack}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-development-only-change-me-use-env-secret}
@@ -48,7 +46,6 @@ services:
   frontend:
     build:
       context: ./frontend
-    container_name: what-the-hack-frontend
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
     ports:

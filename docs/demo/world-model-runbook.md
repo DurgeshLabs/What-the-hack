@@ -89,9 +89,10 @@ docker compose up --build
 ```
 
 The backend image installs `ai/requirements.txt`. If you keep a separate artifact
-outside the repository, copy it into the running backend container for a local demo:
+outside the repository, copy it into the repository's `ai/models/` directory before
+starting Compose (the directory is mounted read-only into the backend):
 
 ```bash
-docker cp ai/models/world_model.pt what-the-hack-backend:/app/ai/models/world_model.pt
+cp /path/to/another-world-model.pt ai/models/world_model.pt
 docker compose restart backend
 ```
