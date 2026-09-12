@@ -14,13 +14,13 @@ See `docs/research/forecasting_formulation.md`.
 
 ## Project status
 
-The **end-to-end demo product is complete**: authenticate → upload CSV traffic → build 60-second feature windows → forecast risk and a MITRE stage → view explanations → save and inspect an alert.
+The **end-to-end demo product is complete**: authenticate → upload CSV traffic or connect an authorised local Zeek sensor → build 60-second feature windows → forecast risk and a MITRE stage → view explanations → save and inspect an alert.
 
 | Area | Included now | Important limitation |
 | --- | --- | --- |
-| Backend | JWT/RBAC, CSV ingestion, 37-feature window extraction, forecast endpoint, persisted alerts, PostgreSQL migrations | No live PCAP capture or streaming ingestion |
+| Backend | JWT/RBAC, CSV replay and authorised Zeek connection-metadata ingestion, 37-feature window extraction, forecast endpoint, persisted alerts, PostgreSQL migrations | Live batches rebuild windows in this MVP; production needs incremental stream processing |
 | ML | PyTorch dynamics + risk-stage model, label/window pipeline, bundled checkpoint, logistic-regression comparison utility | The bundled replay has incomplete source timestamps, so its evaluation result is a demo smoke test, not a final benchmark |
-| Frontend | Login, upload, dashboard charts, a single MITRE-aligned stage verdict, mapping guide, explanations, alerts list/detail, sign-out handling | No live PCAP capture or streaming dashboard yet |
+| Frontend | Login, upload, Live sensor picker, dashboard charts, a single MITRE-aligned stage verdict, mapping guide, explanations, alerts list/detail, sign-out handling | The browser deliberately never handles raw packet payloads |
 | Deployment | Docker Compose stack, health checks, demo accounts | Development defaults only; change secrets for any shared deployment |
 
 ## Included demo artifacts
@@ -132,6 +132,16 @@ These passwords are deliberately development-only. Change them and set a strong 
 
 `sample_data/sample_flows_mini.csv` verifies upload/windowing but is intentionally too short to create the ten-window sequence required by the forecasting model.
 
+### Optional: live local network telemetry
+
+For an authorised personal/lab-network demonstration, the repository includes a Zeek
+connection-log bridge. It tails Zeek's JSON `conn.log`, sends **metadata only** (time,
+addresses, ports, protocol, packet/byte counts, duration and connection state) to the
+protected live-ingestion endpoint, and opens the same forecast dashboard. It never sends
+packet payloads. Full setup, safety boundary, and troubleshooting are in
+[the live Zeek runbook](docs/demo/live-zeek-ingestion.md). Once the bridge is sending,
+use **Live sensor** in the navigation to select its dashboard source.
+
 ### Reading the attack-stage forecast
 
 The dashboard deliberately shows one **five-minute stage verdict** rather than repeating the
@@ -229,7 +239,7 @@ The checkpoint SHA-256 is
 ## Architecture
 
 ```text
-Traffic source / dataset → Ingestion API → raw_flows → Window builder → traffic_windows
+CSV replay or authorised Zeek conn.log → Ingestion API → raw_flows → Window builder → traffic_windows
    → 37-feature extraction → window_features → PyTorch world model + risk-stage head
    → predictions → Alert engine + explanations → alerts → Dashboard APIs → Next.js dashboard
    → Analyst acknowledges → alert_events, audit_logs

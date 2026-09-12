@@ -28,6 +28,7 @@ class IngestionStatus(str, enum.Enum):
 
 class SourceType(str, enum.Enum):
     CSV_REPLAY = "csv_replay"
+    ZEEK_LIVE = "zeek_live"
 
 
 class WindowScope(str, enum.Enum):

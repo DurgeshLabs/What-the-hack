@@ -1,0 +1,63 @@
+# Live Zeek ingestion (authorised networks only)
+
+This optional demo mode turns the project from a CSV replay into a local live-telemetry pipeline:
+
+`authorised network interface → Zeek conn.log (JSON metadata) → local adapter → FastAPI → 60-second features → LSTM forecast → dashboard`
+
+The sensor reads **connection metadata only**: time, IP addresses, ports, protocol, packets, bytes, duration and connection state. It does not read or upload packet payloads. Use it only on an interface and network you own or are explicitly authorised to monitor.
+
+## 1. Start the application
+
+From the project root:
+
+```bash
+docker compose up --build
+```
+
+Open `http://127.0.0.1:3000`, sign in as an analyst, and leave the stack running.
+
+## 2. Identify your local interface
+
+On macOS:
+
+```bash
+networksetup -listallhardwareports
+```
+
+For a normal Wi-Fi-only personal demo this is commonly `en0`; verify the output before using it.
+
+## 3. Start Zeek JSON connection logging
+
+In a second terminal, create a dedicated log folder and start Zeek on the authorised interface:
+
+```bash
+mkdir -p ~/zeek-live
+cd ~/zeek-live
+sudo zeek -i en0 LogAscii::use_json=T
+```
+
+This writes `~/zeek-live/conn.log`. Browsing a site or running a DNS lookup on your own machine will generate connection events. Stop Zeek with `Ctrl-C`.
+
+## 4. Start the local bridge
+
+In a third terminal, from the project root:
+
+```bash
+export WTH_ANALYST_PASSWORD='your analyst password'
+python3 -m ai.ingestion.zeek_live_adapter --log ~/zeek-live/conn.log
+```
+
+The bridge logs in using the analyst account, tails only new JSON connection records, batches up to 100 events, and refreshes its access token automatically when necessary. It prints the source and job IDs after every accepted batch.
+
+## 5. Open the live dashboard
+
+In the web app choose **Live sensor** → **Refresh** → **Open dashboard**. The existing dashboard then displays live-built 60-second windows, the five-minute risk projection, MITRE-aligned stage category, and feature explanation.
+
+The forecast needs the model artifact plus at least 10 completed 60-second windows. For a short demo, keep the sensor running long enough to collect them. This MVP rebuilds source windows after each batch; production deployment should use a durable queue and incremental aggregation instead.
+
+## Troubleshooting
+
+- **“Waiting for Zeek to create conn.log”**: ensure the Zeek command is still running and that its working directory is `~/zeek-live`.
+- **401 on startup**: verify the analyst email/password; the password must be provided through `WTH_ANALYST_PASSWORD`, not typed into the command.
+- **No live source in the browser**: wait for a `Sent … flows` message, then press **Refresh** on `/live`.
+- **No forecast yet**: collect at least 10 distinct minute windows and confirm `ai/models/world_model.pt` is available to the backend container.

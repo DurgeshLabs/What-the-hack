@@ -132,6 +132,10 @@ export function saveForecast(token: string, sourceId: string): Promise<{alert_id
   return request(`/analytics/forecast?traffic_source_id=${encodeURIComponent(sourceId)}`, { method: "POST" }, token);
 }
 export interface IngestionJob { id: string; traffic_source_id: string; status: string; total_rows: number; accepted_rows: number; skipped_rows: number; error_message: string | null; }
+export interface TrafficSource { id: string; name: string; source_type: "csv_replay" | "zeek_live"; description: string | null; is_active: boolean; created_at: string; updated_at: string; }
+export function listTrafficSources(token: string): Promise<TrafficSource[]> {
+  return request<TrafficSource[]>("/ingestion/sources", {}, token);
+}
 export function startReplay(token: string, file: File): Promise<IngestionJob> {
   const form = new FormData(); form.append("file", file);
   return request<IngestionJob>("/ingestion/upload", { method: "POST", body: form }, token);

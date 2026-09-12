@@ -12,14 +12,21 @@ from app.core.config import settings
 from app.core.ratelimit import RateLimiter, enforce
 from app.db.session import get_db
 from app.models.network import AuditLog, IngestionJob, IngestionStatus, RawFlow, SourceType, TrafficSource, User
-from app.schemas.ingestion import IngestionJobResponse
-from app.services.ingestion import CsvValidationError, parse_csv_flows
+from app.schemas.ingestion import IngestionJobResponse, LiveFlowBatch, TrafficSourceResponse
+from app.services.ingestion import CsvValidationError, parse_csv_flows, parse_row
 from app.services.windows import build_traffic_windows_in_background
 
 router = APIRouter(prefix="/ingestion")
 ALLOWED_CONTENT_TYPES = {"text/csv", "application/csv", "application/vnd.ms-excel", "application/octet-stream"}
 INSERT_BATCH_SIZE = 5000
 upload_limiter = RateLimiter(limit=settings.upload_rate_limit_per_minute, window_seconds=60.0)
+MAX_LIVE_BATCH_SIZE = 1_000
+
+
+@router.get("/sources", response_model=list[TrafficSourceResponse])
+def list_traffic_sources(user: User = Depends(require_viewer), db: Session = Depends(get_db)) -> list[TrafficSource]:
+    """List sources so the UI can switch between CSV replays and live Zeek sensors."""
+    return list(db.scalars(select(TrafficSource).where(TrafficSource.is_active.is_(True)).order_by(TrafficSource.created_at.desc())))
 
 
 @router.post("/upload", response_model=IngestionJobResponse, status_code=status.HTTP_201_CREATED)
@@ -98,6 +105,74 @@ def upload_csv(
     job.status = IngestionStatus.COMPLETED
     job.completed_at = datetime.now(timezone.utc)
     db.add(AuditLog(actor_user_id=user.id, action="ingestion.upload", resource_type="ingestion_job", resource_id=job.id, metadata_json={"accepted_rows": job.accepted_rows, "skipped_rows": job.skipped_rows}))
+    db.commit()
+    db.refresh(job)
+    background_tasks.add_task(build_traffic_windows_in_background, source.id, job.id)
+    return job
+
+
+@router.post("/live", response_model=IngestionJobResponse, status_code=status.HTTP_201_CREATED)
+def ingest_live_flows(
+    payload: LiveFlowBatch,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(require_analyst),
+    db: Session = Depends(get_db),
+) -> IngestionJob:
+    """Receive normalized batches from a permitted live network sensor such as Zeek.
+
+    The endpoint accepts metadata only: connection time, addresses, ports, protocol,
+    packets, bytes, duration, and connection state. It never accepts packet payloads.
+    This MVP rebuilds source windows after each batch; production streaming should use
+    a queue and incremental window aggregation.
+    """
+    if not payload.flows:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="flows must not be empty")
+    if len(payload.flows) > MAX_LIVE_BATCH_SIZE:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=f"At most {MAX_LIVE_BATCH_SIZE} live flows per batch")
+    source_name = payload.source_name.strip()
+    if not source_name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="source_name must not be empty")
+    source = db.scalar(select(TrafficSource).where(TrafficSource.name == source_name))
+    if source is None:
+        source = TrafficSource(
+            name=source_name,
+            source_type=SourceType.ZEEK_LIVE,
+            description="Permitted live connection metadata supplied by Zeek",
+            created_by_user_id=user.id,
+        )
+        db.add(source)
+        db.flush()
+    parsed_flows = []
+    for flow in payload.flows:
+        try:
+            parsed_flows.append(parse_row({key: str(value) if value is not None else None for key, value in flow.model_dump().items()}))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid live flow: {exc}") from None
+    content_hash = hashlib.sha256(repr([(flow.observed_at, flow.src_ip, flow.dst_ip, flow.src_port, flow.dst_port) for flow in parsed_flows]).encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+    job = IngestionJob(
+        traffic_source_id=source.id,
+        requested_by_user_id=user.id,
+        original_filename="zeek-live-connection-batch",
+        content_hash=content_hash,
+        status=IngestionStatus.RUNNING,
+        total_rows=len(payload.flows),
+        accepted_rows=0,
+        skipped_rows=0,
+        started_at=now,
+    )
+    db.add(job)
+    db.flush()
+    rows = [{
+        "traffic_source_id": source.id, "ingestion_job_id": job.id, "observed_at": flow.observed_at,
+        "src_ip": flow.src_ip, "dst_ip": flow.dst_ip, "src_port": flow.src_port, "dst_port": flow.dst_port,
+        "protocol": flow.protocol, "packet_count": flow.packet_count, "byte_count": flow.byte_count,
+        "duration_ms": flow.duration_ms, "tcp_flags": flow.tcp_flags, "failed_connection": flow.failed_connection,
+        "extra_json": {**flow.extra_json, "sensor": "zeek"},
+    } for flow in parsed_flows]
+    db.execute(insert(RawFlow), rows)
+    job.accepted_rows, job.status, job.completed_at = len(rows), IngestionStatus.COMPLETED, now
+    db.add(AuditLog(actor_user_id=user.id, action="ingestion.live.zeek", resource_type="ingestion_job", resource_id=job.id, metadata_json={"accepted_rows": len(rows), "source": source_name}))
     db.commit()
     db.refresh(job)
     background_tasks.add_task(build_traffic_windows_in_background, source.id, job.id)
