@@ -362,6 +362,14 @@ limits across workers, and secret rotation.
 
 ## Dataset, model, and evaluation honesty
 
+**Read [`docs/research/evaluation-report.md`](docs/research/evaluation-report.md) before
+quoting any accuracy number.** Measured on a chronological split with a purge embargo, the
+neural forecaster currently scores an ROC-AUC of 0.21, which is worse than random, while the
+logistic baseline reaches 0.67. The high F1 this project used to report was an artefact of a
+test partition that is almost entirely attack traffic. The report explains the cause and the
+fix.
+
+
 The bundled replay is CICIDS2017-derived and includes attack labels for local training
 and demonstration. It is not the original official timestamped capture export, so its
 chronological final test partition can be class-skewed. Do not claim its local 100% binary

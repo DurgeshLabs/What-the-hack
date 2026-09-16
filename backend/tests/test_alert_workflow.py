@@ -182,3 +182,35 @@ def test_unknown_alert_is_404(client, analyst_token) -> None:
     missing = "11111111-1111-1111-1111-111111111111"
     assert client.get(f"/api/v1/alerts/{missing}", headers=bearer(analyst_token)).status_code == 404
     assert client.patch(f"/api/v1/alerts/{missing}/status", json={"status": "acknowledged"}, headers=bearer(analyst_token)).status_code == 404
+
+
+def test_system_overview_is_admin_only_and_reports_real_state(client, seeded_users, source_id, analyst_token) -> None:
+    save_alert(client, analyst_token, source_id)
+    admin = login(client, "admin@what-the-hack.local", seeded_users["admin@what-the-hack.local"])["access_token"]
+
+    assert client.get("/api/v1/system/overview", headers=bearer(analyst_token)).status_code == 403
+    assert client.get("/api/v1/system/audit", headers=bearer(analyst_token)).status_code == 403
+
+    body = client.get("/api/v1/system/overview", headers=bearer(admin)).json()
+    assert body["counts"]["users"] == 3
+    assert body["counts"]["alerts"] == 1
+    assert body["counts"]["raw_flows"] == 120
+    assert body["alerts_by_status"]["open"] == 1
+    assert body["fallback_predictions"] == 1
+    assert {account["role"] for account in body["users"]} == {"admin", "analyst", "viewer"}
+    assert [model["name"] for model in body["models"]] == ["rule-fallback"]
+    assert body["configuration"]["checkpoint_present"] is False
+
+
+def test_audit_trail_records_the_whole_session(client, seeded_users, source_id, analyst_token) -> None:
+    alert_id = save_alert(client, analyst_token, source_id)["alert_id"]
+    client.patch(f"/api/v1/alerts/{alert_id}/status", json={"status": "acknowledged"}, headers=bearer(analyst_token))
+    admin = login(client, "admin@what-the-hack.local", seeded_users["admin@what-the-hack.local"])["access_token"]
+
+    items = client.get("/api/v1/system/audit", headers=bearer(admin)).json()["items"]
+    actions = [entry["action"] for entry in items]
+    for expected in ("auth.login", "ingestion.upload", "alert.created", "alert.status_changed"):
+        assert expected in actions, f"{expected} missing from {actions}"
+    # Newest first, and the actor is resolved to an email.
+    assert items[0]["created_at"] >= items[-1]["created_at"]
+    assert any(entry["actor_email"] for entry in items)

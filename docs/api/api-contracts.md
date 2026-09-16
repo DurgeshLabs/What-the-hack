@@ -40,9 +40,9 @@ After each successful CSV upload, a lightweight FastAPI background task builds t
 | `analyst` | View alerts/details; acknowledge, investigate, and resolve alerts; upload only if explicitly enabled. |
 | `viewer` | Read dashboard summaries and alert details only. |
 
-## Dashboard alert response
+## Dashboard alert response (superseded)
 
-`GET /api/v1/alerts` will return alerts in descending operational priority: risk/severity, then recency.
+Superseded by **Alerts and the investigation workflow** above, which documents the shape the API actually returns. Kept for the Day 1 record.
 
 ```json
 {
@@ -67,7 +67,7 @@ After each successful CSV upload, a lightweight FastAPI background task builds t
 }
 ```
 
-## Alert detail response
+## Alert detail response (superseded)
 
 `GET /api/v1/alerts/{alert_id}` adds evidence and actions without changing the list-card fields.
 
@@ -90,6 +90,74 @@ After each successful CSV upload, a lightweight FastAPI background task builds t
   "updated_at": "2026-08-28T10:01:05Z"
 }
 ```
+
+## Alerts and the investigation workflow
+
+`GET /api/v1/alerts` returns saved forecasts newest first. Optional query parameters:
+`status` (`open`, `acknowledged`, `investigating`, `resolved`), `severity` (`low`, `medium`,
+`high`, `critical`), `limit` (1 to 200, default 50), and `before`, which takes the previous
+page's `next_cursor`.
+
+Each item carries the forecast plus its honesty flags:
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "prediction_id": "uuid",
+      "status": "open",
+      "severity": "high",
+      "title": "Forecasted Reconnaissance risk",
+      "summary": "The model forecasts high risk (68/100) in the next 5 minutes.",
+      "risk_score": 68.0,
+      "risk_level": "high",
+      "predicted_attack_type": "Reconnaissance",
+      "predicted_stage": "Reconnaissance",
+      "confidence_score": 0.72,
+      "is_fallback": false,
+      "is_uncertain": false,
+      "is_ood": false,
+      "forecast_window_start": "2026-08-28T18:05:00Z",
+      "forecast_window_end": "2026-08-28T18:10:00Z",
+      "target_host": {"ip_address": "10.0.0.24", "hostname": null, "entity_type": "internal"},
+      "recommended_actions": ["Confirm which services are exposed on the probed destination ports."],
+      "top_feature_contributors": [{"feature": "dst_port_entropy", "contribution": 0.31}],
+      "created_at": "2026-08-28T18:05:04Z",
+      "resolved_at": null
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+`GET /api/v1/alerts/{id}` adds an `events` array, the investigation timeline.
+
+`PATCH /api/v1/alerts/{id}/status` moves the alert. Body: `{"status": "acknowledged", "note": "optional"}`.
+Analyst or admin only. Allowed transitions:
+
+| From | To |
+| --- | --- |
+| `open` | `acknowledged`, `investigating`, `resolved` |
+| `acknowledged` | `investigating`, `resolved`, `open` |
+| `investigating` | `resolved`, `acknowledged` |
+| `resolved` | `investigating` |
+
+Anything else returns `409` with the current status and the allowed moves. Resolving stamps
+`resolved_at`; reopening clears it. Every change writes one `alert_events` row and one
+`audit_logs` row.
+
+`POST /api/v1/alerts/{id}/notes` records a comment without changing the status.
+`GET /api/v1/alerts/{id}/events` returns the timeline alone.
+
+## Admin and audit
+
+`GET /api/v1/system/overview` (admin only) returns pipeline counts, alerts by status, the
+number of predictions that came from the fallback, the account list, every registered model
+version, and the effective configuration including whether a weak JWT secret is in use.
+
+`GET /api/v1/system/audit?limit=50` (admin only) returns the most recent audit entries with
+the actor resolved to an email address.
 
 ## ML inference adapter contract
 
