@@ -195,6 +195,7 @@ def inference_response_definition() -> dict:
             "explanation_json": {"$ref": "#/definitions/Explanation"},
             "alert_triggered": {"type": "boolean", "description": "risk_score >= alert_threshold."},
             "stage_progression": {"type": "string", "enum": list(c.STAGES)},
+            "predicted_stage": {"type": "string", "enum": list(c.MITRE_STAGES), "description": "Coarse kill-chain stage. Answers 'where in the campaign', while predicted_attack_type answers 'what kind of traffic'."},
             "is_fallback": {"type": "boolean", "default": False},
             "fallback_reason": {"type": "string", "enum": sorted(c.ERROR_CODES) + ["MODEL_ERROR"]},
             "is_uncertain": {"type": "boolean", "default": False, "description": f"confidence_score < {c.LOW_CONFIDENCE_THRESHOLD}."},
@@ -306,6 +307,12 @@ def contract_decisions() -> dict:
         },
         "risk_level_bands": {level: {"min_inclusive": lo, "max_exclusive": hi if level != "critical" else None} for level, (lo, hi) in c.RISK_LEVEL_BANDS.items()},
         "default_alert_threshold": c.DEFAULT_ALERT_THRESHOLD,
+        "mitre_stage_taxonomy": {
+            "stages": list(c.MITRE_STAGES),
+            "stage_to_attack_type": dict(c.STAGE_TO_ATTACK_TYPE),
+            "rule": "The world model predicts a stage. The backend stores it in predictions.predicted_stage and derives predictions.predicted_attack_type from the map above, so both columns stay contract-valid.",
+            "caveat": "These are transparent coarse progression categories aligned to MITRE tactics, not verified ATT&CK technique attributions.",
+        },
         "attack_type_taxonomy": {
             "benign": "BENIGN",
             "unknown": "UNKNOWN",

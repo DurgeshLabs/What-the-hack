@@ -821,6 +821,18 @@
             "S3_ACTIVE_PEAK"
           ]
         },
+        "predicted_stage": {
+          "type": "string",
+          "enum": [
+            "Benign",
+            "Reconnaissance",
+            "Initial Access",
+            "Lateral Movement",
+            "Command & Control",
+            "Exfiltration / Impact"
+          ],
+          "description": "Coarse kill-chain stage. Answers 'where in the campaign', while predicted_attack_type answers 'what kind of traffic'."
+        },
         "is_fallback": {
           "type": "boolean",
           "default": false
@@ -1783,6 +1795,26 @@
       }
     },
     "default_alert_threshold": 50.0,
+    "mitre_stage_taxonomy": {
+      "stages": [
+        "Benign",
+        "Reconnaissance",
+        "Initial Access",
+        "Lateral Movement",
+        "Command & Control",
+        "Exfiltration / Impact"
+      ],
+      "stage_to_attack_type": {
+        "Benign": "BENIGN",
+        "Reconnaissance": "Reconnaissance",
+        "Initial Access": "BruteForce",
+        "Lateral Movement": "Infiltration",
+        "Command & Control": "Botnet_C2",
+        "Exfiltration / Impact": "DoS"
+      },
+      "rule": "The world model predicts a stage. The backend stores it in predictions.predicted_stage and derives predictions.predicted_attack_type from the map above, so both columns stay contract-valid.",
+      "caveat": "These are transparent coarse progression categories aligned to MITRE tactics, not verified ATT&CK technique attributions."
+    },
     "attack_type_taxonomy": {
       "benign": "BENIGN",
       "unknown": "UNKNOWN",

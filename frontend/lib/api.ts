@@ -9,22 +9,66 @@ export type HealthResponse = Record<string, unknown>;
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 
+export type AlertStatus = "open" | "acknowledged" | "investigating" | "resolved";
+
+export interface FeatureContribution {
+  feature: string;
+  contribution: number;
+  description?: string;
+  value?: number;
+}
+
+export interface TargetHost {
+  ip_address: string;
+  hostname: string | null;
+  entity_type: string | null;
+}
+
 export interface AlertCard {
   id: string;
-  status: string;
-  severity: string;
+  prediction_id: string;
+  status: AlertStatus;
+  severity: RiskLevel;
   title: string;
   summary: string;
   risk_score: number;
   risk_level: RiskLevel;
   predicted_attack_type: string | null;
+  predicted_stage: string | null;
   confidence_score: number;
+  is_fallback: boolean;
+  is_uncertain: boolean;
+  is_ood: boolean;
   forecast_window_start: string;
   forecast_window_end: string;
+  target_host: TargetHost | null;
   created_at: string;
+  resolved_at: string | null;
   recommended_actions: string[];
-  top_feature_contributors: { feature: string; contribution: number; value?: number }[];
+  top_feature_contributors: FeatureContribution[];
 }
+
+export interface AlertEvent {
+  id: string;
+  event_type: string;
+  from_status: AlertStatus | null;
+  to_status: AlertStatus | null;
+  note: string | null;
+  actor_user_id: string | null;
+  created_at: string;
+}
+
+export interface AlertDetail extends AlertCard {
+  events: AlertEvent[];
+}
+
+/** Transitions the API accepts, mirroring app/services/alerts.py. */
+export const ALLOWED_TRANSITIONS: Record<AlertStatus, AlertStatus[]> = {
+  open: ["acknowledged", "investigating", "resolved"],
+  acknowledged: ["investigating", "resolved", "open"],
+  investigating: ["resolved", "acknowledged"],
+  resolved: ["investigating"],
+};
 
 export interface AlertListResponse {
   items: AlertCard[];
@@ -91,12 +135,34 @@ export function logout(token: string): Promise<void> {
   return fetch(`${API_BASE_URL}/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).then(() => undefined);
 }
 
-export function listAlerts(token: string): Promise<AlertListResponse> {
-  return request<AlertListResponse>("/alerts", {}, token);
+export interface AlertFilters {
+  status?: AlertStatus;
+  severity?: RiskLevel;
+  limit?: number;
+  before?: string | null;
 }
 
-export function getAlertDetail(token: string, id: string): Promise<AlertCard> {
-  return request<AlertCard>(`/alerts/${id}`, {}, token);
+export function listAlerts(token: string, filters: AlertFilters = {}): Promise<AlertListResponse> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.severity) params.set("severity", filters.severity);
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.before) params.set("before", filters.before);
+  const query = params.toString();
+  return request<AlertListResponse>(`/alerts${query ? `?${query}` : ""}`, {}, token);
+}
+
+export function getAlertDetail(token: string, id: string): Promise<AlertDetail> {
+  return request<AlertDetail>(`/alerts/${id}`, {}, token);
+}
+
+/** Acknowledge, investigate, resolve, or reopen. Rejected transitions return 409. */
+export function updateAlertStatus(token: string, id: string, status: AlertStatus, note?: string): Promise<AlertDetail> {
+  return request<AlertDetail>(`/alerts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, note: note || null }) }, token);
+}
+
+export function addAlertNote(token: string, id: string, note: string): Promise<AlertEvent> {
+  return request<AlertEvent>(`/alerts/${id}/notes`, { method: "POST", body: JSON.stringify({ note }) }, token);
 }
 
 export interface TrafficWindow {
@@ -129,9 +195,23 @@ export interface Overview {
   latest_destinations: { destination_ip: string; destination_port: number | null; protocol: string; flows: number; packets: number; bytes: number }[];
 }
 export interface Forecast {
-  observed_until: string; peak_risk_level: RiskLevel; peak_risk_stage: string | null;
-  risk_timeline: { step: number; risk_score: number; stage: string | null }[];
-  top_feature_contributors: { feature: string; contribution: number; value?: number }[];
+  observed_until: string;
+  peak_risk_level: RiskLevel;
+  peak_risk_stage: string | null;
+  predicted_attack_type?: string;
+  confidence_score: number;
+  is_uncertain: boolean;
+  is_ood: boolean;
+  is_fallback: boolean;
+  fallback_reason: string | null;
+  model_name: string;
+  model_version: string;
+  window_count: number;
+  ood_features?: { feature: string; z_score: number }[];
+  risk_timeline: { step: number; risk_score: number; stage: string | null; stage_confidence?: number }[];
+  top_feature_contributors: FeatureContribution[];
+  explanation_summary?: string;
+  mitigation_recommendation?: string;
 }
 
 export function getOverview(token: string, sourceId: string): Promise<Overview> {
@@ -155,4 +235,52 @@ export function startReplay(token: string, file: File): Promise<IngestionJob> {
 }
 export function getJobStatus(token: string, jobId: string): Promise<IngestionJob> {
   return request<IngestionJob>(`/ingestion/${jobId}/status`, {}, token);
+}
+
+// --- Admin ------------------------------------------------------------------
+
+export interface SystemOverview {
+  counts: Record<string, number>;
+  alerts_by_status: Record<string, number>;
+  fallback_predictions: number;
+  users: { email: string; display_name: string; role: string; is_active: boolean; last_login_at: string | null }[];
+  models: {
+    name: string;
+    version: string;
+    feature_schema_version: string;
+    artifact_uri: string;
+    is_active: boolean;
+    metrics: Record<string, unknown>;
+    created_at: string;
+  }[];
+  configuration: {
+    environment: string;
+    traffic_window_seconds: number;
+    forecast_steps: number;
+    max_upload_size_mb: number;
+    rate_limit_enabled: boolean;
+    login_rate_limit_per_minute: number;
+    upload_rate_limit_per_minute: number;
+    checkpoint_configured: boolean;
+    checkpoint_present: boolean;
+    uses_default_jwt_secret: boolean;
+  };
+}
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  actor_email: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export function getSystemOverview(token: string): Promise<SystemOverview> {
+  return request<SystemOverview>("/system/overview", {}, token);
+}
+
+export function getAuditTrail(token: string, limit = 25): Promise<{ items: AuditEntry[] }> {
+  return request<{ items: AuditEntry[] }>(`/system/audit?limit=${limit}`, {}, token);
 }

@@ -31,6 +31,10 @@ out/
 npm-debug.log*
 yarn-error.log*
 
+# A clone of this repository made inside itself. Committing it would add a gitlink
+# and, worse, drag along its .env. Delete the folder when you no longer need it.
+/What-the-hack/
+
 # Scratch output
 output/
 tmp/

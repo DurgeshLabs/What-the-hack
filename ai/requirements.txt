@@ -1,3 +1,5 @@
-# Training/inference extras (the backend uses its rule fallback without them).
+# Training, evaluation, and checkpoint inference extras.
+# The backend runs without any of these: it falls back to the rule-based scorer.
 numpy>=1.26
 torch>=2.2
+scikit-learn>=1.4   # logistic-regression baseline and metrics in ai/evaluation
