@@ -143,6 +143,7 @@ CREATE TABLE predictions (
 	risk_score NUMERIC(5, 2) NOT NULL, 
 	risk_level VARCHAR(8) NOT NULL, 
 	predicted_attack_type VARCHAR(80), 
+	predicted_stage VARCHAR(40), 
 	confidence_score NUMERIC(4, 3) NOT NULL, 
 	is_fallback BOOLEAN DEFAULT 'false' NOT NULL, 
 	is_uncertain BOOLEAN DEFAULT 'false' NOT NULL, 
@@ -230,3 +231,4 @@ CREATE TABLE alert_events (
 	FOREIGN KEY(alert_id) REFERENCES alerts (id) ON DELETE CASCADE, 
 	FOREIGN KEY(actor_user_id) REFERENCES users (id) ON DELETE SET NULL
 );
+CREATE INDEX ix_alert_events_alert_created ON alert_events (alert_id, created_at);

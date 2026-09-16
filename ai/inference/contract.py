@@ -65,6 +65,28 @@ CANONICAL_ATTACK_LABELS = (
 ATTACK_FAMILIES = ("Reconnaissance", "BruteForce", "DoS", "DDoS", "WebAttack", "Botnet_C2", "Infiltration")
 ATTACK_TYPES = ("BENIGN",) + CANONICAL_ATTACK_LABELS + ATTACK_FAMILIES + ("UNKNOWN",)
 
+# Coarse kill-chain stages the world model predicts. These are transparent progression
+# categories aligned to MITRE tactics, not verified ATT&CK techniques.
+MITRE_STAGES = (
+    "Benign",
+    "Reconnaissance",
+    "Initial Access",
+    "Lateral Movement",
+    "Command & Control",
+    "Exfiltration / Impact",
+)
+
+# A stage answers "where in the campaign", an attack type answers "what kind of traffic".
+# A response carries both: `predicted_stage` and the `predicted_attack_type` below.
+STAGE_TO_ATTACK_TYPE = {
+    "Benign": "BENIGN",
+    "Reconnaissance": "Reconnaissance",
+    "Initial Access": "BruteForce",
+    "Lateral Movement": "Infiltration",
+    "Command & Control": "Botnet_C2",
+    "Exfiltration / Impact": "DoS",
+}
+
 LABEL_TO_FAMILY = {
     "PortScan": "Reconnaissance",
     "DoS_Hulk": "DoS",
@@ -192,6 +214,13 @@ ERROR_CODES = {
     "INFERENCE_TIMEOUT": "The model did not answer within INFERENCE_TIMEOUT_SEC; the backend uses the rule-based fallback.",
     "INTERNAL_ERROR": "Unexpected exception inside the model; the backend uses the rule-based fallback and logs the trace.",
 }
+
+
+def attack_type_for_stage(stage: str | None) -> str:
+    """Map a predicted MITRE stage onto a contract-valid predicted_attack_type."""
+    if stage is None:
+        return "UNKNOWN"
+    return STAGE_TO_ATTACK_TYPE.get(stage, "UNKNOWN")
 
 
 def risk_level_for(risk_score: float) -> str:

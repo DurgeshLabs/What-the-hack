@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from ai.inference.contract import LABEL_TO_FAMILY
+from ai.inference.contract import LABEL_TO_FAMILY, MITRE_STAGES
 
-MITRE_STAGES = (
-    "Benign", "Reconnaissance", "Initial Access", "Lateral Movement",
-    "Command & Control", "Exfiltration / Impact",
-)
+__all__ = ["MITRE_STAGES", "stage_for_label", "risk_for_label"]
 
 _FAMILY_TO_STAGE = {
     "Reconnaissance": 1, "BruteForce": 2, "WebAttack": 2,
