@@ -19,6 +19,12 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r backend/requirements.txt pytest httpx
       - run: pytest backend/tests
+      # The DDL snapshot is generated from the ORM models; fail if someone changed a
+      # model without regenerating it.
+      - name: database/schema/schema.sql is in sync with the models
+        run: |
+          cd backend && PYTHONPATH=. python ../database/schema/export_schema.py
+          cd .. && git diff --exit-code database/schema/schema.sql
 
   ml-contracts:
     name: ML contract tests

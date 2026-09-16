@@ -31,26 +31,34 @@ out/
 npm-debug.log*
 yarn-error.log*
 
-# Data and model artifacts (keep the repo small; commit metadata JSON only)
+# Scratch output
+output/
+tmp/
 uploads/
+*.log
 *.sqlite3
+
+# Raw captures and archives — never commit these
+*.zip
+*.pcap
+*.pcapng
+
+# Datasets. Only the small cleaned demo replay is committed; see
+# ai/datasets/cleaned/README.md for why it is an exception.
 ai/datasets/data/
 ai/datasets/raw/
+ai/datasets/cleaned/*
+!ai/datasets/cleaned/README.md
+!ai/datasets/cleaned/cicids2017_archive_clean.csv
+
+# Model artifacts. Only the small demo checkpoint is committed; see
+# ai/models/README.md. Commit a <model>.metadata.json beside any new artifact.
 ai/models/*.pkl
 ai/models/*.joblib
 ai/models/*.bin
 ai/models/*.onnx
 ai/models/*.h5
 ai/models/*.pt
+ai/models/*.pth
+ai/models/*.safetensors
 !ai/models/world_model.pt
-*.zip
-*.pcap
-*.pcapng
-
-# Logs
-*.log
-ai/datasets/cleaned/*
-!ai/datasets/cleaned/README.md
-!ai/datasets/cleaned/cicids2017_archive_clean.csv
-output/
-tmp/

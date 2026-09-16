@@ -1,0 +1,31 @@
+# Normalise line endings so Windows checkouts do not produce whole-file diffs.
+* text=auto eol=lf
+
+*.sh      text eol=lf
+*.py      text eol=lf
+*.ts      text eol=lf
+*.tsx     text eol=lf
+*.md      text eol=lf
+*.yml     text eol=lf
+*.json    text eol=lf
+*.sql     text eol=lf
+*.csv     text eol=lf
+
+# Binary: never diff or merge these.
+*.png     binary
+*.jpg     binary
+*.ico     binary
+*.pt      binary
+*.pth     binary
+*.pkl     binary
+*.docx    binary
+*.pdf     binary
+
+# Generated or vendored. Collapsed in pull-request diffs, and excluded from the
+# language statistics GitHub shows for the repository.
+frontend/package-lock.json      linguist-generated=true
+docs/api/feature_schema_contract.json  linguist-generated=true
+database/schema/schema.sql      linguist-generated=true
+ai/datasets/cleaned/*.csv       linguist-generated=true
+sample_data/*.csv               linguist-generated=true
+docs/**                         linguist-documentation=true
