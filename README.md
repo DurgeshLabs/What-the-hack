@@ -12,6 +12,23 @@ This is forecasting, not detection: the model is trained with future-shifted lab
 features of window `t` predict whether an attack starts or escalates in `(t, t + horizon]`.
 See `docs/research/forecasting_formulation.md`.
 
+## Contents
+
+| Section | |
+| --- | --- |
+| [Project status](#project-status) | What works today and each area's limitation |
+| [Included demo artifacts](#included-demo-artifacts) | The replay and checkpoint a fresh clone gets |
+| [Repository layout](#repository-layout) | Where everything lives |
+| [Quick start](#quick-start) | Run the whole demo with Docker |
+| [Local development](#local-development) | Run backend and frontend directly |
+| [Live network telemetry](#optional-live-local-network-telemetry) | Optional authorised Zeek sensor |
+| [Interpreting the forecast](#interpreting-the-forecast) | Risk scores, false positives, attack stages |
+| [Training a model artifact](#training-a-model-artifact) | Retrain the bundled checkpoint |
+| [Tests and verification](#tests-and-verification) | Test suites and troubleshooting |
+| [Architecture](#architecture) | Pipeline and stack |
+| [Security](#security) | Controls in place and future work |
+| [Contributing](#contributing) | Team guide, ownership, workflow |
+
 ## Project status
 
 The **end-to-end demo product is complete**: authenticate → upload CSV traffic or connect an authorised local Zeek sensor → build 60-second feature windows → forecast risk and a MITRE stage → view explanations → save and inspect an alert.
@@ -50,17 +67,31 @@ world model forecast a peak risk of 78%.
 
 ```text
 .
-├── frontend/        Next.js analyst dashboard (app/, components/, lib/, public/)
-├── backend/         FastAPI API: app/{api,core,db,models,schemas,services}, alembic/, tests/
-├── ai/              ML workspace: datasets/, preprocessing/, feature_engineering/, training/,
-│                    evaluation/, inference/, models/, notebooks/
-├── database/        Schema snapshots, seed notes, migration rules (Alembic lives in backend/)
-├── tests/           ml/ (contract + invariant tests), backend/, integration/, frontend/
-├── docs/            architecture/, api/, research/, demo/, devlog/, diagrams/
-├── deployment/      docker/, compose/, scripts/ (bootstrap_backend.sh, run_tests.sh)
-├── sample_data/     sample_flows_mini.csv — deterministic 3-phase replay sample
-├── .github/         CI workflow, PR and issue templates
-├── docker-compose.yml
+├── frontend/            Next.js analyst dashboard
+│   ├── app/             Pages: login, dashboard, alerts, upload, live, admin
+│   ├── components/      Shared UI (charts, session nav, system status)
+│   └── lib/api.ts       Typed API client
+├── backend/             FastAPI service
+│   ├── app/             api/ core/ db/ models/ schemas/ services/
+│   ├── alembic/         Migrations (the only place schema changes live)
+│   ├── scripts/         seed_demo_users.py
+│   └── tests/           Unit + HTTP tests against the real app
+├── ai/                  ML workspace
+│   ├── datasets/        Acquisition CLI + bundled cleaned demo replay
+│   ├── feature_engineering/  Contract generator, validator, labelled windows
+│   ├── training/        World-model training
+│   ├── evaluation/      Model comparison
+│   ├── inference/       contract.py (source of truth), forecast engine, fallback
+│   ├── ingestion/       Zeek live adapter
+│   └── models/          Bundled demo checkpoint
+├── database/            Readable DDL snapshot + exporter (Alembic lives in backend/)
+├── tests/ml/            ML contract and invariant tests
+├── docs/                architecture/ api/ research/ demo/ devlog/ deliverables/
+├── deployment/scripts/  bootstrap, tests, live demo, GitHub setup
+├── sample_data/         sample_flows_mini.csv — short 3-phase replay sample
+├── .github/             CI workflow, CODEOWNERS, PR and issue templates
+├── docker-compose.yml       Default stack: db + backend + frontend
+├── docker-compose.live.yml  Adds the authorised Zeek bridge
 ├── .env.example
 ├── CONTRIBUTING.md
 └── LICENSE
@@ -132,7 +163,28 @@ These passwords are deliberately development-only. Change them and set a strong 
 
 `sample_data/sample_flows_mini.csv` verifies upload/windowing but is intentionally too short to create the ten-window sequence required by the forecasting model.
 
-### Optional: live local network telemetry
+## Local development
+
+```bash
+docker compose up -d db                      # PostgreSQL only
+./deployment/scripts/bootstrap_backend.sh    # venv, deps, migrations, demo users
+cd backend && PYTHONPATH=..:. .venv/bin/uvicorn app.main:app --reload
+```
+
+In a second terminal:
+
+```bash
+cd frontend && cp .env.example .env.local && npm install && npm run dev
+```
+
+Demo accounts are created by `backend/scripts/seed_demo_users.py` (roles `admin`,
+`analyst`, `viewer`). The built-in demo passwords are accepted only while
+`ENVIRONMENT=development`; anywhere else the script refuses to run until
+`DEMO_ADMIN_PASSWORD`, `DEMO_ANALYST_PASSWORD`, and `DEMO_VIEWER_PASSWORD` are set.
+Likewise the backend refuses to start outside development with the default
+`JWT_SECRET_KEY` or one shorter than 32 characters.
+
+## Optional: live local network telemetry
 
 For an authorised personal/lab-network demonstration, the repository includes a Zeek
 connection-log bridge. It tails Zeek's JSON `conn.log`, sends **metadata only** (time,
@@ -152,7 +204,9 @@ Replace `en0` with the interface confirmed by `networksetup -listallhardwareport
 Docker runs the application and bridge; Zeek stays on the host because Docker Desktop
 cannot observe the Mac's physical Wi-Fi interface directly.
 
-### Live-score interpretation and false positives
+## Interpreting the forecast
+
+### Risk scores and false positives
 
 Do not treat the dashboard percentage as a verdict that a PC, Wi-Fi connection, IP address,
 or website is malicious. It is the current model's **attack-likeness risk score** for the
@@ -168,7 +222,7 @@ evidence before calling it an incident.”* The dashboard shows the contributing
 and IP/port evidence for this validation. It intentionally does **not** call an IP address or
 website malicious from flow statistics alone.
 
-#### How to improve the model responsibly
+### How to improve the model responsibly
 
 1. **Keep CICIDS2017 as the starting training set**, but use its original timestamped files,
    not only the bundled compact replay. It provides labelled benign traffic plus brute force,
@@ -206,28 +260,7 @@ CICIDS-to-MITRE-aligned progression categories—not verified ATT&CK techniques.
 must validate a forecast using endpoint, identity, and packet-level evidence. The exact label
 mapping is in [docs/research/mitre_stage_mapping.md](docs/research/mitre_stage_mapping.md).
 
-### Option B — local development
-
-```bash
-docker compose up -d db                      # PostgreSQL only
-./deployment/scripts/bootstrap_backend.sh    # venv, deps, migrations, demo users
-cd backend && PYTHONPATH=. .venv/bin/uvicorn app.main:app --reload
-```
-
-In a second terminal:
-
-```bash
-cd frontend && cp .env.example .env.local && npm install && npm run dev
-```
-
-Demo accounts are created by `backend/scripts/seed_demo_users.py` (roles `admin`,
-`analyst`, `viewer`). The built-in demo passwords are accepted only while
-`ENVIRONMENT=development`; anywhere else the script refuses to run until
-`DEMO_ADMIN_PASSWORD`, `DEMO_ANALYST_PASSWORD`, and `DEMO_VIEWER_PASSWORD` are set.
-Likewise the backend refuses to start outside development with the default
-`JWT_SECRET_KEY` or one shorter than 32 characters.
-
-### Train a model artifact
+## Training a model artifact
 
 To retrain the bundled model from the bundled replay:
 
@@ -240,17 +273,17 @@ This replaces `ai/models/world_model.pt`. Restart the backend after training.
 For final research, pass original timestamped CICIDS files instead; full preparation,
 training, and evaluation instructions are in [the model runbook](docs/demo/world-model-runbook.md).
 
-## Tests
+## Tests and verification
 
 ```bash
 ./deployment/scripts/run_tests.sh            # pytest over backend/tests and tests/
 ./deployment/scripts/run_tests.sh backend/tests
 ./deployment/scripts/run_tests.sh tests/ml
-cd frontend && npm run build
+cd frontend && npm test && npm run build
 ```
 
-`tests/ml/test_tier5_adversarial_coverage.py` is ML work in progress and is skipped in CI
-until it collects.
+`tests/ml/test_tier5_adversarial_coverage.py` imports cleanly but defines no test
+functions yet, so it contributes nothing to the run. It is ML work in progress.
 
 ### Verify the bundled model
 
@@ -337,76 +370,23 @@ and evaluate with original timestamped CICIDS2017 files using a split where both
 attack windows appear in each test fold. Synthetic replay data is for UI verification only,
 never as accuracy evidence.
 
-### First-time setup
+## Contributing
 
-```bash
-git clone https://github.com/DurgeshLabs/What-the-hack.git
-cd What-the-hack
-git checkout dev
-```
+Everything a teammate needs is in **[CONTRIBUTING.md](CONTRIBUTING.md)**: who owns what,
+first-time setup, the branch and commit conventions, the daily workflow, and a
+step-by-step "how to push your changes" guide for each role.
 
-Then follow **Quick start** above for your area. Backend and ML people need Python 3.12
-and PostgreSQL (Docker), frontend people need Node 20.
+| Member | Name | Owns |
+| --- | --- | --- |
+| 1 | Durgesh | Team lead: scope, architecture, integration |
+| 2 | Adarsh | Frontend dashboard |
+| 3 | Shreya | Backend and database |
+| 4 | Yash Bhanushali | AI/ML and data |
+| 5 | Kshitij | UI/UX, QA, documentation |
+| 6 | Arnav | DevOps, deployment, presentation |
 
-### Daily workflow
-
-1. **Pick a task.** Take an issue from the GitHub project board (Backlog -> This Week -> In
-   Progress -> Blocked -> Review -> Ready for Integration -> Done). If there is no issue,
-   create one with the *Feature / task* template and label it `frontend`, `backend`, `ml`,
-   `docs`, or `demo`.
-2. **Branch from `dev`.**
-   ```bash
-   git checkout dev && git pull
-   git checkout -b feature/<area>-<topic>      # e.g. feature/frontend-alert-detail, feature/ml-xgboost-baseline
-   ```
-   Use `fix/<topic>` for bug fixes and `docs/<topic>` for documentation-only changes.
-3. **Work in your folder.** Keep changes inside the area you own. If you must touch
-   another area (for example the backend needs a new field from ML), open an issue and
-   tag the owner first.
-4. **Commit small, with a prefix.** `feat:`, `fix:`, `docs:`, `refactor:`, `test:`,
-   `chore:`. Example: `feat: add alert detail API`.
-5. **Run the checks before pushing.**
-   ```bash
-   ./deployment/scripts/run_tests.sh            # Python: backend + ML
-   cd frontend && npm run build                 # frontend type-check and build
-   ```
-6. **Open a pull request against `dev`.** Fill in the template: what changed, screenshots
-   for UI, test status, known limitations. Link the issue with `Closes #<number>`.
-7. **Get one review.** At least one teammate approves before merging. Reviewers check that
-   the contract docs still match the code and that nothing hard-codes secrets or paths.
-8. **Merge and delete the branch.** `dev` is integrated end to end every two or three days;
-   `main` is fast-forwarded from `dev` only after the full demo flow works.
-
-
-### Rules that keep the demo safe
-
-- Never commit `.env`, datasets, model binaries, or `node_modules`. `.gitignore` already
-  blocks them; check `git status` before committing.
-- Never edit an Alembic migration that has reached a shared database. Add a new one.
-- Never change `docs/api/feature_schema_contract.json` by hand. Edit
-  `ai/inference/contract.py`, regenerate, bump the version, and update
-  `backend/app/schemas/inference.py` in the same PR.
-- Never push directly to `main`.
-- Every new API route, parser, feature calculator, or screen ships with a test.
-- If you are blocked for more than half a day, move the card to *Blocked* and say so in
-  the standup: what you finished, what you are doing today, what is blocking you.
-
-### Where to look first
-
-| I want to... | Read |
-| --- | --- |
-| Understand the product and its boundaries | `docs/architecture/day-1-scope.md` |
-| See the database tables | `docs/architecture/database-schema.md` |
-| Call or extend the REST API | `docs/api/api-contracts.md` |
-| Integrate with the ML model | `docs/api/ml-inference-contract.md` |
-| Run the pipeline end to end | `docs/devlog/day-4-ingestion.md`, `docs/devlog/day-5-windows-and-docker.md` |
-| Prepare the demo | `docs/demo/demo-script.md` |
-| Branch, commit, and PR rules in full | `CONTRIBUTING.md` |
-
-## Team and ownership
-
-See `CONTRIBUTING.md` for branch strategy (`main` stable, `dev` integration, feature
-branches), commit conventions, PR checklist, labels, and the ownership/backup matrix.
+Start from `dev`, never push to `main`, and open the pull request against `dev`.
+Documentation index: [`docs/README.md`](docs/README.md).
 
 ## License
 
