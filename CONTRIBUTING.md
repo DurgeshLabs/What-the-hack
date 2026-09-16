@@ -18,14 +18,17 @@ and predictable so the demo build never breaks.
 
 ## Who owns what
 
-| Member | Name | Owns |
-| --- | --- | --- | --- |
-| 1 | Adarsh | Frontend development + team lead + PPT storyline/narrative |
-| 2 | Shreya | Backend development (APIs, auth, DB) + built the AI/LSTM forecasting model |
-| 3 | Yash Bhanushali | AI model support + research work |
-| 4 | Arnav | PPT design + documentation |
-| 5 | Kshitij | Testing (backend + model validation) |
-| 6 | Durgesh | AI model refinement — training improvements, tuning |
+# Contributions — What the Hack (SIH26153)
+
+| Name    | Primary Contribution                                      |
+|---------|-------------------------------------------------------------|
+| Adarsh    | Frontend development + team lead + PPT storyline/narrative   |
+| Shreya  | Backend development (APIs, auth, DB) + built the AI/LSTM forecasting model |
+| Yash  | AI model support + research work                        |
+| Durgesh | AI model refinement — training improvements, tuning |
+| Kshitij    |  Testing (backend + model validation                            |
+| Arnav   | PPT design + documentation                                   |
+
 
 
 `.github/CODEOWNERS` turns this table into automatic review requests.
