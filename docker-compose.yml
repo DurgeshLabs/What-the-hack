@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: what-the-hack-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-what_the_hack}
@@ -21,17 +20,20 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: what-the-hack-backend
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://what_the_hack:what_the_hack@db:5432/what_the_hack}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-development-only-change-me-use-env-secret}
       ENVIRONMENT: ${ENVIRONMENT:-development}
-      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-["http://localhost:3000","http://localhost:5173"]}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://192.168.65.1:3000"]}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-50}
       TRAFFIC_WINDOW_SECONDS: ${TRAFFIC_WINDOW_SECONDS:-60}
+      # The artifact is git-ignored but mounted below for a local trained-demo run.
+      WORLD_MODEL_CHECKPOINT: ${WORLD_MODEL_CHECKPOINT:-/app/ai/models/world_model.pt}
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
+    volumes:
+      - ./ai/models:/app/ai/models:ro
     depends_on:
       db:
         condition: service_healthy
@@ -44,7 +46,6 @@ services:
   frontend:
     build:
       context: ./frontend
-    container_name: what-the-hack-frontend
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
     ports:

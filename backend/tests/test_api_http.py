@@ -87,8 +87,8 @@ def test_upload_pipeline_windows_and_duplicate_guard(client, seeded_users) -> No
 
     duplicate = client.post("/api/v1/ingestion/upload", headers=bearer(admin["access_token"]),
                             data={"source_name": "http-test"}, files={"file": ("sample.csv", content, "text/csv")})
-    assert duplicate.status_code == 409
-    assert duplicate.json()["detail"]["existing_job_id"] == job["id"]
+    assert duplicate.status_code == 201
+    assert duplicate.json()["id"] == job["id"]
 
     # Background build ran inside the TestClient call; page through the windows two at a time.
     source_id = job["traffic_source_id"]
@@ -115,9 +115,40 @@ def test_upload_pipeline_windows_and_duplicate_guard(client, seeded_users) -> No
     assert rebuilt.status_code == 201 and rebuilt.json()["windows_written"] == 5
 
 
+def unique_csv(index: int) -> bytes:
+    """A valid one-flow CSV whose content hash differs per index, so each upload is a new import."""
+    return (
+        "timestamp,src_ip,dst_ip,src_port,dst_port,protocol,packets,bytes\n"
+        f"2026-08-28T18:00:00.000Z,192.168.10.{index + 1},10.0.0.2,49152,443,TCP,{index + 1},100\n"
+    ).encode()
+
+
+def upload(client, token: str, index: int, source: str):
+    return client.post(
+        "/api/v1/ingestion/upload",
+        headers=bearer(token),
+        data={"source_name": source},
+        files={"file": (f"flows-{index}.csv", unique_csv(index), "text/csv")},
+    )
+
+
 def test_upload_is_rate_limited_per_user(client, seeded_users) -> None:
+    """Only genuinely new imports consume the budget: rejected files and idempotent repeats do not."""
     admin = login(client, "admin@what-the-hack.local", seeded_users["admin@what-the-hack.local"])
-    for _ in range(10):
-        client.post("/api/v1/ingestion/upload", headers=bearer(admin["access_token"]), files={"file": ("x.txt", b"x", "text/plain")})
-    blocked = client.post("/api/v1/ingestion/upload", headers=bearer(admin["access_token"]), files={"file": ("x.txt", b"x", "text/plain")})
+    token = admin["access_token"]
+
+    # Rejected before the limiter runs, so these must not count against the budget.
+    for _ in range(5):
+        assert client.post("/api/v1/ingestion/upload", headers=bearer(token), files={"file": ("x.txt", b"x", "text/plain")}).status_code == 415
+
+    for index in range(10):
+        response = upload(client, token, index, f"rate-limit-{index}")
+        assert response.status_code == 201, response.text
+
+    # The budget is now spent, but re-sending an already completed file is idempotent and
+    # still returns its original job instead of a 429 (a demo must not lock the analyst out).
+    repeat = upload(client, token, 0, "rate-limit-0")
+    assert repeat.status_code == 201, repeat.text
+
+    blocked = upload(client, token, 99, "rate-limit-overflow")
     assert blocked.status_code == 429

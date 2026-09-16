@@ -18,6 +18,7 @@ import argparse
 import csv
 import datetime
 import hashlib
+import ipaddress
 import os
 import re
 import sys
@@ -603,6 +604,17 @@ def map_cicids_to_raw_flows(
         df = df_raw.copy()
         df.columns = clean_cols
 
+        # The public "archive" mirror of CICIDS2017 uses compact column names
+        # and decimal IPv4 addresses.  Normalize those aliases before applying
+        # the canonical CICFlowMeter transformation below.
+        aliases = {
+            "Src Port": "Source Port", "Dst Port": "Destination Port",
+            "Total Fwd Packet": "Total Fwd Packets", "Total Bwd packets": "Total Backward Packets",
+            "Total Length of Fwd Packet": "Total Length of Fwd Packets",
+            "Total Length of Bwd Packet": "Total Length of Bwd Packets",
+        }
+        df = df.rename(columns={source: target for source, target in aliases.items() if source in df.columns and target not in df.columns})
+
         # 2. Drop duplicate column 'Fwd Header Length.1' if present
         if "Fwd Header Length.1" in df.columns:
             df = df.drop(columns=["Fwd Header Length.1"])
@@ -676,19 +688,39 @@ def map_cicids_to_raw_flows(
         )
 
         # 8. IP addresses with fallback logic
+        def _decimal_ipv4(value: Any, fallback: str) -> str:
+            try:
+                return str(ipaddress.ip_address(int(float(value))))
+            except (TypeError, ValueError):
+                return fallback
+
         if "Source IP" in df.columns:
             src_ip = df["Source IP"].astype(str).str.strip().replace("", "192.168.10.50")
+        elif "Src IP dec" in df.columns:
+            src_ip = df["Src IP dec"].apply(lambda value: _decimal_ipv4(value, "192.168.10.50"))
         else:
             src_ip = pd.Series("192.168.10.50", index=df.index)
 
         if "Destination IP" in df.columns:
             dst_ip = df["Destination IP"].astype(str).str.strip().replace("", "172.16.0.1")
+        elif "Dst IP dec" in df.columns:
+            dst_ip = df["Dst IP dec"].apply(lambda value: _decimal_ipv4(value, "172.16.0.1"))
         else:
             dst_ip = pd.Series("172.16.0.1", index=df.index)
 
         # 9. Timestamps
         if "Timestamp" in df.columns:
-            timestamps = df["Timestamp"].apply(parse_flexible_timestamp)
+            raw_timestamps = df["Timestamp"].astype(str).str.strip()
+            # Some public mirrors retain only mm:ss.s with no hour/day, making
+            # absolute clock reconstruction ambiguous. Build a deterministic
+            # replay timeline from source row order instead; this preserves the
+            # temporal attack progression without claiming those timestamps are
+            # original capture time.
+            if raw_timestamps.str.fullmatch(r"\d{1,2}:\d{2}(?:\.\d+)?").all():
+                base = pd.Timestamp("2017-07-03T00:00:00Z")
+                timestamps = (base + pd.to_timedelta(np.arange(len(df)) * 20, unit="ms")).strftime("%Y-%m-%dT%H:%M:%SZ")
+            else:
+                timestamps = raw_timestamps.apply(parse_flexible_timestamp)
         else:
             now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             timestamps = pd.Series(now_iso, index=df.index)
@@ -698,7 +730,8 @@ def map_cicids_to_raw_flows(
             if pd.isna(lbl_val):
                 return "BENIGN"
             lbl_clean = str(lbl_val).replace("\x96", "-").replace("–", "-").strip()
-            return LABEL_MAPPING.get(lbl_clean, LABEL_MAPPING.get(lbl_clean.strip(), "BENIGN"))
+            lbl_clean = re.sub(r"\s*-\s*Attempted$", "", lbl_clean, flags=re.IGNORECASE)
+            return LABEL_MAPPING.get(lbl_clean, LABEL_MAPPING.get(lbl_clean.lower(), "BENIGN"))
 
         labels = df.get("Label", "BENIGN").apply(_sanitize_lbl)
 

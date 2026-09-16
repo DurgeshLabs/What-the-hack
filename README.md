@@ -1,7 +1,7 @@
 # What the Hack — AI-based Network Attack Forecasting
 
 **SIH 2026 · Problem statement SIH26153 · National Technical Research Organisation (NTRO)**
-**Theme: Blockchain & Cybersecurity · Category: Software · Team Cogitate**
+**Theme: Blockchain & Cybersecurity · Category: Software**
 
 An explainable early-warning system that forecasts likely cyber attacks from network-traffic
 behaviour **before they fully materialise**. It groups recent traffic into short windows,
@@ -12,14 +12,39 @@ This is forecasting, not detection: the model is trained with future-shifted lab
 features of window `t` predict whether an attack starts or escalates in `(t, t + horizon]`.
 See `docs/research/forecasting_formulation.md`.
 
-## Status
+## Project status
 
-| Area | Done | Next |
+The **end-to-end demo product is complete**: authenticate → upload CSV traffic or connect an authorised local Zeek sensor → build 60-second feature windows → forecast risk and a MITRE stage → view explanations → save and inspect an alert.
+
+| Area | Included now | Important limitation |
 | --- | --- | --- |
-| Backend | FastAPI scaffold, PostgreSQL schema + Alembic migrations, JWT auth + RBAC, CSV ingestion, 60-second traffic windows, Pydantic inference schemas, Docker | Feature extraction, inference adapter (timeout + fallback), predictions and alerts API, audit trail |
-| ML | Forecasting formulation, CICIDS2017 tool, feature-schema contract v1 (37 features), rule-based fallback via `ai.inference.forecast`, contract test suite, sample replay CSV | Window feature extraction, forecasting labels, XGBoost baseline, evaluation report |
-| Frontend | Next.js scaffold with API client and backend health card | Login, dashboard, alerts list, alert detail, upload/admin pages |
-| Deployment | `docker-compose.yml` for db + backend + frontend, CI workflow | Demo seed data, backup demo build |
+| Backend | JWT/RBAC, CSV replay and authorised Zeek connection-metadata ingestion, 37-feature window extraction, forecast endpoint, persisted alerts, PostgreSQL migrations | Live batches rebuild windows in this MVP; production needs incremental stream processing |
+| ML | PyTorch dynamics + risk-stage model, label/window pipeline, bundled checkpoint, logistic-regression comparison utility | The bundled replay has incomplete source timestamps, so its evaluation result is a demo smoke test, not a final benchmark |
+| Frontend | Login, upload, Live sensor picker, dashboard charts, a single MITRE-aligned stage verdict, mapping guide, explanations, alerts list/detail, sign-out handling | The browser deliberately never handles raw packet payloads |
+| Deployment | Docker Compose stack, health checks, demo accounts | Development defaults only; change secrets for any shared deployment |
+
+## Included demo artifacts
+
+A fresh clone contains the artifacts needed to run the demonstrated prediction path.
+
+| File | Purpose |
+| --- | --- |
+| `ai/datasets/cleaned/cicids2017_archive_clean.csv` | 105,000-row normalized, labeled CICIDS2017-derived replay for local upload and training checks |
+| `ai/models/world_model.pt` | Pre-trained PyTorch world-model checkpoint used by Docker Compose and the dashboard |
+
+The source archive is intentionally excluded because it is approximately 1.7 GB.
+The bundled replay and checkpoint let every teammate reproduce the UI demo without
+downloading it. The bundled replay uses a deterministic source-order timeline because
+its public archive variant omits complete capture timestamps; it is a demo artifact,
+not evidence for final benchmark claims.
+
+## Screenshot
+
+The dashboard displays the observed traffic timeline alongside the five-step forecast.
+In this bundled demo run, 143 feature windows were built from the replay and the local
+world model forecast a peak risk of 78%.
+
+![What the Hack dashboard showing the observed traffic chart and five-minute risk forecast](frontend/public/screenshots/dashboard-forecast.png)
 
 ## Repository layout
 
@@ -43,22 +68,143 @@ See `docs/research/forecasting_formulation.md`.
 
 ## Quick start
 
-### Option A — everything in Docker
+### Run the complete demo in Docker
 
 ```bash
-cp .env.example .env            # set JWT_SECRET_KEY
+git clone https://github.com/DurgeshLabs/What-the-hack.git
+cd What-the-hack
+cp .env.example .env
 docker compose up --build
 ```
 
+### If you downloaded a ZIP instead of cloning
+
+Extract the current GitHub ZIP, open Terminal in the extracted `What-the-hack-main`
+folder, then run the same two commands:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The ZIP includes the cleaned replay and the trained checkpoint, so Git and the original
+large CICIDS archive are not required. If Docker reports that ports `3000`, `5432`, or
+`8000` are already in use, another local copy of the demo is running. Stop that copy from
+its own project folder with `docker compose down`, then run the command above again. Do
+not use `docker compose down -v` unless you intend to remove its local database.
+
 | Service | URL |
 | --- | --- |
-| Frontend | http://localhost:3000 |
-| Backend API docs | http://localhost:8000/docs |
-| Health check | http://localhost:8000/api/v1/health |
+| Frontend | http://127.0.0.1:3000 |
+| Backend API docs | http://127.0.0.1:8000/docs |
+| Health check | http://127.0.0.1:8000/api/v1/health |
 | PostgreSQL | localhost:5432 (`what_the_hack` / `what_the_hack`) |
 
 `docker compose down` stops the stack and keeps the database volume. Only use
 `docker compose down -v` when you intend to delete local data.
+
+If your browser does not resolve `localhost`, use `127.0.0.1` exactly as shown above.
+
+### Seed local demo accounts
+
+Open a second terminal while Compose is running:
+
+```bash
+docker compose exec backend python scripts/seed_demo_users.py
+```
+
+| Role | Email | Local development password |
+| --- | --- | --- |
+| Analyst (recommended) | `analyst@what-the-hack.local` | `AnalystPass123!` |
+| Admin | `admin@what-the-hack.local` | `AdminPass123!` |
+| Viewer | `viewer@what-the-hack.local` | `ViewerPass123!` |
+
+These passwords are deliberately development-only. Change them and set a strong `JWT_SECRET_KEY` before exposing the service beyond your machine.
+
+### Use the app
+
+1. Open **http://127.0.0.1:3000/login** and sign in as the analyst.
+2. Go to **Upload** and select `ai/datasets/cleaned/cicids2017_archive_clean.csv`. This bundled file has enough data for the world-model sequence and is the recommended first demo replay. The required columns are timestamp, source/destination address, protocol, packet count, and byte count; see [`sample_data/`](sample_data/) for the accepted shape.
+3. Wait for the upload status to become `completed`. The service persists raw rows and builds 60-second traffic windows plus the 37-feature vectors.
+4. Select **Open your live dashboard**. It shows observed traffic immediately.
+5. The bundled `ai/models/world_model.pt` mounts automatically when Compose starts. Refresh the dashboard after upload to see the five-step forecast, the attack-stage verdict, its MITRE-aligned mapping guide, and feature explanations.
+6. Click **Save as alert** to add the current forecast to the investigation queue. Open **Alerts** to view the stored risk, stage, ranked contributors, and recommended actions.
+
+`sample_data/sample_flows_mini.csv` verifies upload/windowing but is intentionally too short to create the ten-window sequence required by the forecasting model.
+
+### Optional: live local network telemetry
+
+For an authorised personal/lab-network demonstration, the repository includes a Zeek
+connection-log bridge. It tails Zeek's JSON `conn.log`, sends **metadata only** (time,
+addresses, ports, protocol, packet/byte counts, duration and connection state) to the
+protected live-ingestion endpoint, and opens the same forecast dashboard. It never sends
+packet payloads. Full setup, safety boundary, and troubleshooting are in
+[the live Zeek runbook](docs/demo/live-zeek-ingestion.md). Once the bridge is sending,
+use **Live sensor** in the navigation to select its dashboard source.
+
+On macOS, the quickest authorised demo is one terminal after Zeek is installed:
+
+```bash
+WTH_ANALYST_PASSWORD='AnalystPass123!' bash deployment/scripts/start_live_demo.sh en0
+```
+
+Replace `en0` with the interface confirmed by `networksetup -listallhardwareports`.
+Docker runs the application and bridge; Zeek stays on the host because Docker Desktop
+cannot observe the Mac's physical Wi-Fi interface directly.
+
+### Live-score interpretation and false positives
+
+Do not treat the dashboard percentage as a verdict that a PC, Wi-Fi connection, IP address,
+or website is malicious. It is the current model's **attack-likeness risk score** for the
+next five minutes, not a calibrated probability and not a confirmed incident. A healthy
+personal computer can score highly because its real traffic distribution (software updates,
+streaming, cloud synchronization, DNS, encrypted connections, or a busy shared Wi-Fi) differs
+from the controlled CICIDS2017 lab traffic used to train the bundled checkpoint. That is a
+normal form of dataset shift and must be investigated as a possible false positive.
+
+For a demo, say: *“The system raised an early-warning score because these traffic features
+were unlike its training baseline. We validate it with destination, endpoint, and identity
+evidence before calling it an incident.”* The dashboard shows the contributing feature values
+and IP/port evidence for this validation. It intentionally does **not** call an IP address or
+website malicious from flow statistics alone.
+
+#### How to improve the model responsibly
+
+1. **Keep CICIDS2017 as the starting training set**, but use its original timestamped files,
+   not only the bundled compact replay. It provides labelled benign traffic plus brute force,
+   DoS/DDoS, web attack, infiltration, botnet, and scan scenarios.
+2. **Evaluate on a different dataset before making claims.** Use CSE-CIC-IDS2018 as an
+   external test set after mapping it into this repository's 37-feature contract. Do not mix
+   the same capture into both training and test partitions.
+3. **Collect authorised benign Zeek metadata from the target environment** (for example one
+   to two weeks of normal home/lab activity), remove or protect personal identifiers, and use
+   it to measure the false-positive rate and tune an alert threshold. Do not fine-tune the
+   whole attack classifier on benign-only data: that would make it forget attack classes.
+4. **Calibrate and gate alerts.** Fit Platt scaling or isotonic calibration on a labelled
+   validation split, choose a threshold for an agreed false-positive rate, and display
+   “review” rather than “critical” when the model is out of distribution.
+5. **Add domain and endpoint corroboration.** Enrich permitted live logs with DNS/TLS-SNI,
+   endpoint process and authentication evidence; retain human analyst review before response.
+
+Recommended public sources: [official CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html),
+[official CSE-CIC-IDS2018](https://www.unb.ca/cic/datasets/ids-2018.html), and
+[ToN_IoT](https://research.unsw.edu.au/projects/toniot-datasets) only when the intended
+deployment is IoT/industrial traffic. Each non-CIC dataset needs an explicit normalizer and
+label mapping before it can train this model; do not upload it blindly and expect valid scores.
+
+### Reading the attack-stage forecast
+
+The dashboard deliberately shows one **five-minute stage verdict** rather than repeating the
+same stage label in every forecast row. The rows beneath it show risk by future minute. If the
+model predicts a change of stage, the interface instead displays the transition point and the
+new stage. A sustained stage means the model sees a continuing pattern, not five separate
+incidents.
+
+The six model classes are `Benign`, `Reconnaissance`, `Initial Access`, `Lateral Movement`,
+`Command & Control`, and `Exfiltration / Impact`. These are transparent, coarse
+CICIDS-to-MITRE-aligned progression categories—not verified ATT&CK techniques. The analyst
+must validate a forecast using endpoint, identity, and packet-level evidence. The exact label
+mapping is in [docs/research/mitre_stage_mapping.md](docs/research/mitre_stage_mapping.md).
 
 ### Option B — local development
 
@@ -81,11 +227,18 @@ Demo accounts are created by `backend/scripts/seed_demo_users.py` (roles `admin`
 Likewise the backend refuses to start outside development with the default
 `JWT_SECRET_KEY` or one shorter than 32 characters.
 
-### Try the pipeline
+### Train a model artifact
 
-Follow `docs/devlog/day-4-ingestion.md` to log in and upload
-`sample_data/sample_flows_mini.csv`, then `docs/devlog/day-5-windows-and-docker.md` to
-build and inspect the traffic windows.
+To retrain the bundled model from the bundled replay:
+
+```bash
+PYTHONPATH=.:backend python -m ai.training.train_world_model \
+  ai/datasets/cleaned/cicids2017_archive_clean.csv --epochs 15
+```
+
+This replaces `ai/models/world_model.pt`. Restart the backend after training.
+For final research, pass original timestamped CICIDS files instead; full preparation,
+training, and evaluation instructions are in [the model runbook](docs/demo/world-model-runbook.md).
 
 ## Tests
 
@@ -99,11 +252,45 @@ cd frontend && npm run build
 `tests/ml/test_tier5_adversarial_coverage.py` is ML work in progress and is skipped in CI
 until it collects.
 
+### Verify the bundled model
+
+After cloning, confirm the checkpoint loads before opening the demo:
+
+```bash
+docker compose exec backend python -c "from ai.inference.forecast_engine import load_model; _, checkpoint = load_model('/app/ai/models/world_model.pt'); print('checkpoint ready:', checkpoint['seq_len'], 'history windows')"
+```
+
+The expected output is `checkpoint ready: 10 history windows`. Docker Compose mounts
+this same artifact automatically at `/app/ai/models/world_model.pt`.
+
+### Common local-demo fixes
+
+| What you see | What to do |
+| --- | --- |
+| Browser cannot open `localhost` | Use `http://127.0.0.1:3000` and confirm `docker compose ps` shows both frontend and backend as running. |
+| `401 Unauthorized` after switching tabs | Sign out and sign in again. A backend restart invalidates existing development tokens. |
+| `403 Forbidden for /ingestion/upload` | Sign in with the **analyst** account, then rebuild/restart with `docker compose up --build` so the latest API permissions are running. |
+| `409 Conflict` while uploading | The same file is already being processed or was already accepted. Return to the dashboard; uploads are idempotent in the current build. |
+| Dashboard says `Artifact offline` | Run `git pull`, then `docker compose up --build`; use the verification command above to confirm the checkpoint is mounted. |
+| Forecast panel is empty | Upload the bundled replay, which produces 143 windows. The small sample CSV does not reach the model's 10-window history requirement. |
+
+### Dataset integrity
+
+The checked-in replay is intentionally small enough to clone and share. Its SHA-256 is
+`b513721d394229b03816d3010cf120f5f0f20ec7131821f54b9cb1d2331111ca`; verify it with:
+
+```bash
+shasum -a 256 ai/datasets/cleaned/cicids2017_archive_clean.csv
+```
+
+The checkpoint SHA-256 is
+`7dddd4f26842928241eef023c0b37593270bfc32bebd53129e734ca090b5819d`.
+
 ## Architecture
 
 ```text
-Traffic source / dataset → Ingestion API → raw_flows → Window builder → traffic_windows
-   → Feature extraction → window_features → Forecasting model (XGBoost, rule fallback)
+CSV replay or authorised Zeek conn.log → Ingestion API → raw_flows → Window builder → traffic_windows
+   → 37-feature extraction → window_features → PyTorch world model + risk-stage head
    → predictions → Alert engine + explanations → alerts → Dashboard APIs → Next.js dashboard
    → Analyst acknowledges → alert_events, audit_logs
 ```
@@ -113,7 +300,7 @@ Traffic source / dataset → Ingestion API → raw_flows → Window builder → 
 | Frontend | Next.js, React, Tailwind CSS |
 | Backend | FastAPI, SQLAlchemy 2, Alembic, Pydantic |
 | Database | PostgreSQL 16 |
-| ML | XGBoost / LightGBM baseline, Random Forest comparison, SHAP explanations |
+| ML | PyTorch world model + risk-stage head, logistic-regression comparison, feature contribution ranking |
 | Auth | JWT + role-based access control (`admin`, `analyst`, `viewer`) |
 | Deployment | Docker Compose; CPU-only, no paid APIs |
 
@@ -140,29 +327,15 @@ database-aware health check, and a startup guard that refuses weak JWT secrets o
 development. Still future work for production: HTTPS termination, Redis-backed rate
 limits across workers, and secret rotation.
 
-## Datasets and honesty
+## Dataset, model, and evaluation honesty
 
-Public benchmarks only: CICIDS2017 (primary), UNSW-NB15, CTU-13, NSL-KDD as a baseline.
-Synthetic replay data is used for demo visualisation only, never as evaluation evidence.
-Reported metrics come from held-out data under the purge-embargo split; production accuracy
-depends on environment-specific retraining.
-
-## How to contribute (team guide)
-
-### Who owns what
-
-| Member | Name | Owns | Works mostly in |
-| --- | --- | --- | --- |
-| 1 | Durgesh | Team lead: scope, architecture, integration decisions, final PPT story | `docs/`, reviews everywhere |
-| 2 | Adarsh | Frontend: login, dashboard, alerts list, alert detail, upload and admin pages | `frontend/`, `tests/frontend/` |
-| 3 | Shreya | Backend: APIs, auth, ingestion, windows, predictions, alerts, migrations | `backend/`, `database/`, `tests/backend/` |
-| 4 | Yash Bhanushali | AI/ML and data: datasets, features, forecasting labels, model, evaluation, inference | `ai/`, `tests/ml/`, `docs/research/` |
-| 5 | Kshitij | UI/UX, QA, documentation: wireframes, test cases, bug reports, user guide, demo notes | `docs/`, `tests/integration/`, `frontend/` (with Adarsh) |
-| 6 | Arnav | DevOps, integration, research, presentation: Docker, deployment, demo build, backup video | `deployment/`, `docker-compose.yml`, `.github/` |
-
-Backups so nothing lives with one person: Durgesh and Arnav can both run the full stack;
-Shreya and Yash both understand the inference contract; Adarsh and Kshitij both know the
-demo flow.
+The bundled replay is CICIDS2017-derived and includes attack labels for local training
+and demonstration. It is not the original official timestamped capture export, so its
+chronological final test partition can be class-skewed. Do not claim its local 100% binary
+F1 smoke-test result as final research accuracy. For a defensible final benchmark, train
+and evaluate with original timestamped CICIDS2017 files using a split where both benign and
+attack windows appear in each test fold. Synthetic replay data is for UI verification only,
+never as accuracy evidence.
 
 ### First-time setup
 
@@ -204,150 +377,6 @@ and PostgreSQL (Docker), frontend people need Node 20.
 8. **Merge and delete the branch.** `dev` is integrated end to end every two or three days;
    `main` is fast-forwarded from `dev` only after the full demo flow works.
 
-### How to push your changes, by role
-
-Every role follows the same shape: branch from `dev`, work in your folder, run your
-checks, push, open a pull request against `dev`. The details differ per area.
-
-#### Frontend (Adarsh)
-
-```bash
-git checkout dev && git pull
-git checkout -b feature/frontend-<screen>          # e.g. feature/frontend-alert-detail
-cd frontend && npm install && cp .env.example .env.local
-npm run dev                                        # http://localhost:3000, backend on :8000
-```
-
-Work in `frontend/app` (pages), `frontend/components`, and `frontend/lib/api.ts` (typed
-API calls; response shapes come from `docs/api/api-contracts.md`). Before pushing:
-
-```bash
-npm test && npm run build                          # type-check, then production build
-git add frontend
-git commit -m "feat: add alert detail page"
-git push -u origin feature/frontend-alert-detail
-```
-
-Open the PR against `dev` with screenshots of every new or changed screen, and note the
-empty, loading, and error states you handled.
-
-#### Backend and database (Shreya)
-
-```bash
-git checkout dev && git pull
-git checkout -b feature/backend-<topic>            # e.g. feature/backend-alerts-api
-docker compose up -d db
-./deployment/scripts/bootstrap_backend.sh          # venv, deps, migrations, demo users
-cd backend && PYTHONPATH=..:. .venv/bin/uvicorn app.main:app --reload
-```
-
-Work in `backend/app` (routes in `api/v1/routes`, logic in `services`, Pydantic in
-`schemas`, ORM in `models`). Schema changes get a new revision:
-
-```bash
-cd backend && .venv/bin/alembic revision -m "add alerts table"   # then edit the file
-.venv/bin/alembic upgrade head
-```
-
-Before pushing:
-
-```bash
-./deployment/scripts/run_tests.sh backend/tests    # unit + HTTP tests on SQLite
-cd backend && PYTHONPATH=. .venv/bin/python ../database/schema/export_schema.py   # if models changed
-git add backend database docs/api
-git commit -m "feat: add alerts list and detail API"
-git push -u origin feature/backend-alerts-api
-```
-
-Update `docs/api/api-contracts.md` in the same PR whenever a response shape changes.
-
-#### AI/ML and data (Yash)
-
-```bash
-git checkout dev && git pull
-git checkout -b feature/ml-<topic>                 # e.g. feature/ml-xgboost-baseline
-python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt pytest jsonschema pandas numpy
-```
-
-Work in `ai/` (`preprocessing`, `feature_engineering`, `training`, `evaluation`,
-`inference`) and `tests/ml`. Raw datasets go under `ai/datasets/data/` and model binaries
-under `ai/models/`; both are git-ignored, commit only small metadata JSON. If the feature
-contract changes:
-
-```bash
-# edit ai/inference/contract.py, bump CONTRACT_VERSION, then
-backend/.venv/bin/python ai/feature_engineering/build_feature_schema_contract.py
-# and mirror the change in backend/app/schemas/inference.py
-```
-
-Before pushing:
-
-```bash
-./deployment/scripts/run_tests.sh tests/ml backend/tests/test_inference_schemas.py
-git add ai tests/ml docs/api docs/research
-git commit -m "feat: train XGBoost baseline with next-window labels"
-git push -u origin feature/ml-xgboost-baseline
-```
-
-The PR must include the metrics table (precision, recall, F1, ROC-AUC, PR-AUC, lead time)
-and say which dataset split produced it.
-
-#### UI/UX, QA, and documentation (Kshitij)
-
-```bash
-git checkout dev && git pull
-git checkout -b docs/<topic>                       # e.g. docs/user-guide, or fix/<bug> for a bug you fixed
-```
-
-Wireframes and exports go in `docs/diagrams/`, test scenarios in `tests/integration/`
-(Markdown checklists are fine until they become code), the user guide and demo notes in
-`docs/demo/`. For a bug you found but cannot fix, open an issue with the *Bug report*
-template and the `bug` label; add `urgent` if it blocks the demo. Before pushing:
-
-```bash
-./deployment/scripts/run_tests.sh                  # only if you touched code
-git add docs tests/integration
-git commit -m "docs: add analyst user guide"
-git push -u origin docs/user-guide
-```
-
-#### DevOps, integration, and presentation (Arnav)
-
-```bash
-git checkout dev && git pull
-git checkout -b chore/<topic>                      # e.g. chore/compose-redis, chore/ci-postgres
-cp .env.example .env
-docker compose up --build                          # full stack: db, backend, frontend
-```
-
-Work in `deployment/`, `docker-compose.yml`, the two Dockerfiles, and `.github/`. Before pushing:
-
-```bash
-docker compose config --quiet                      # compose file validates
-docker compose up --build -d && curl -s localhost:8000/api/v1/health && docker compose down
-./deployment/scripts/run_tests.sh
-git add deployment docker-compose.yml backend/Dockerfile frontend/Dockerfile .github
-git commit -m "chore: add redis service for background jobs"
-git push -u origin chore/compose-redis
-```
-
-Run `./deployment/scripts/github_setup.sh` once (needs the GitHub CLI and admin rights)
-to create the issue labels and protect `main` and `dev`.
-
-#### Team lead (Durgesh)
-
-Reviews and merges. To integrate `dev` into `main` after the end-to-end check:
-
-```bash
-git checkout dev && git pull
-./deployment/scripts/run_tests.sh && (cd frontend && npm test && npm run build)
-git checkout main && git pull
-git merge --ff-only dev
-git push origin main
-```
-
-If `--ff-only` refuses, someone pushed to `main` directly; merge `main` into `dev` first,
-then retry.
 
 ### Rules that keep the demo safe
 

@@ -1,4 +1,5 @@
 import { SystemStatus } from "@/components/SystemStatus";
+import Link from "next/link";
 
 export default function HomePage() {
   return (
@@ -14,12 +15,12 @@ export default function HomePage() {
 
       <section className="grid gap-4 md:grid-cols-3">
         <SystemStatus />
-        <div className="rounded-lg border border-dashed border-slate-300 p-6 text-sm text-slate-500">
-          Risk timeline — pending <code>GET /api/v1/predictions</code>
-        </div>
-        <div className="rounded-lg border border-dashed border-slate-300 p-6 text-sm text-slate-500">
-          Prioritised alerts — pending <code>GET /api/v1/alerts</code>
-        </div>
+        <Link href="/upload" className="rounded-lg border border-indigo-100 bg-indigo-50 p-6 text-sm text-indigo-900">
+          <p className="font-semibold">1. Upload traffic</p><p className="mt-2 text-indigo-700">Build the live, 37-feature window sequence from a CSV replay.</p>
+        </Link>
+        <Link href="/dashboard" className="rounded-lg border border-indigo-100 bg-indigo-50 p-6 text-sm text-indigo-900">
+          <p className="font-semibold">2. Forecast and investigate</p><p className="mt-2 text-indigo-700">View the risk timeline, MITRE stage, and feature-level explanation.</p>
+        </Link>
       </section>
     </div>
   );

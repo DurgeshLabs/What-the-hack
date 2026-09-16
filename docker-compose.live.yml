@@ -1,0 +1,18 @@
+# Optional overlay for an authorised, host-run Zeek sensor.
+# Use with: docker compose -f docker-compose.yml -f docker-compose.live.yml --profile live up --build
+# On macOS, Zeek must run on the host because Docker Desktop containers cannot directly
+# observe the Mac's physical network interface. This container only tails the host log.
+services:
+  live-adapter:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    profiles: ["live"]
+    environment:
+      WTH_ANALYST_PASSWORD: ${WTH_ANALYST_PASSWORD:?Set WTH_ANALYST_PASSWORD before starting the live profile}
+    command: ["python", "-m", "ai.ingestion.zeek_live_adapter", "--api", "http://backend:8000/api/v1", "--log", "/zeek/conn.log"]
+    volumes:
+      - ${ZEEK_LOG_DIR:?Set ZEEK_LOG_DIR to the folder containing conn.log}:/zeek:ro
+    depends_on:
+      backend:
+        condition: service_healthy

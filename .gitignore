@@ -42,9 +42,15 @@ ai/models/*.bin
 ai/models/*.onnx
 ai/models/*.h5
 ai/models/*.pt
+!ai/models/world_model.pt
 *.zip
 *.pcap
 *.pcapng
 
 # Logs
 *.log
+ai/datasets/cleaned/*
+!ai/datasets/cleaned/README.md
+!ai/datasets/cleaned/cicids2017_archive_clean.csv
+output/
+tmp/

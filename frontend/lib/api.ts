@@ -21,8 +21,9 @@ export interface AlertCard {
   confidence_score: number;
   forecast_window_start: string;
   forecast_window_end: string;
-  target_host: { ip_address: string; hostname: string | null } | null;
   created_at: string;
+  recommended_actions: string[];
+  top_feature_contributors: { feature: string; contribution: number; value?: number }[];
 }
 
 export interface AlertListResponse {
@@ -31,7 +32,8 @@ export interface AlertListResponse {
 }
 
 async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json", ...(init.headers as Record<string, string>) };
+  const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
+  if (!(init.body instanceof FormData)) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers, cache: "no-store" });
   if (!response.ok) {
@@ -42,15 +44,6 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
 
 export function getHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/health");
-}
-
-export async function getAlerts() {
-  return [
-    { id: 1, host: "10.0.0.5", severity: "high", score: 82, time: "2 min ago" },
-    { id: 2, host: "10.0.0.9", severity: "medium", score: 45, time: "10 min ago" },
-    { id: 3, host: "10.0.0.14", severity: "critical", score: 96, time: "1 min ago" },
-    { id: 4, host: "10.0.0.22", severity: "low", score: 12, time: "30 min ago" },
-  ];
 }
 
 export interface AuthUser {
@@ -73,8 +66,22 @@ export function login(email: string, password: string): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 }
 
-export function saveSession(session: TokenResponse) { localStorage.setItem("wth_session", JSON.stringify(session)); }
-export function getSession(): TokenResponse | null { const raw = typeof window === "undefined" ? null : localStorage.getItem("wth_session"); return raw ? JSON.parse(raw) as TokenResponse : null; }
+function notifySessionChange() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wth-session-changed"));
+}
+
+export function saveSession(session: TokenResponse) {
+  localStorage.setItem("wth_session", JSON.stringify(session));
+  notifySessionChange();
+}
+export function getSession(): TokenResponse | null { const raw = typeof window === "undefined" ? null : localStorage.getItem("wth_session"); try { return raw ? JSON.parse(raw) as TokenResponse : null; } catch { return null; } }
+export function clearSession() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("wth_session");
+    notifySessionChange();
+  }
+}
+export function isUnauthorized(error: unknown) { return error instanceof Error && error.message.startsWith("401 "); }
 
 export function refresh(refreshToken: string): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/refresh", { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) });
@@ -86,6 +93,10 @@ export function logout(token: string): Promise<void> {
 
 export function listAlerts(token: string): Promise<AlertListResponse> {
   return request<AlertListResponse>("/alerts", {}, token);
+}
+
+export function getAlertDetail(token: string, id: string): Promise<AlertCard> {
+  return request<AlertCard>(`/alerts/${id}`, {}, token);
 }
 
 export interface TrafficWindow {
@@ -111,59 +122,37 @@ export function listWindows(token: string, trafficSourceId: string, after?: stri
   return request<TrafficWindowListResponse>(`/windows?${params.toString()}`, {}, token);
 }
 
-export async function getDashboardSummary() {
-  return {
-    riskCounts: { low: 12, medium: 7, high: 3, critical: 1 },
-    trafficTrend: [
-      { time: "10:00", value: 20 },
-      { time: "10:05", value: 25 },
-      { time: "10:10", value: 22 },
-      { time: "10:15", value: 40 },
-      { time: "10:20", value: 65 },
-      { time: "10:25", value: 90 },
-    ],
-    topHosts: [
-      { host: "10.0.0.14", score: 96 },
-      { host: "10.0.0.5", score: 82 },
-      { host: "10.0.0.9", score: 45 },
-    ],
-  };
+export interface Overview {
+  traffic_source_id: string; window_count: number; model_ready: boolean;
+  traffic: { timestamp: string; packets: number; bytes: number; flows: number }[];
+  latest_features: Record<string, number> | null;
+  latest_destinations: { destination_ip: string; destination_port: number | null; protocol: string; flows: number; packets: number; bytes: number }[];
+}
+export interface Forecast {
+  observed_until: string; peak_risk_level: RiskLevel; peak_risk_stage: string | null;
+  risk_timeline: { step: number; risk_score: number; stage: string | null }[];
+  top_feature_contributors: { feature: string; contribution: number; value?: number }[];
 }
 
-export async function getAlertDetail(id: string) {
-  // Fake detail data — keyed by id for now
-  const details: Record<string, any> = {
-    "1": {
-      id: 1,
-      host: "10.0.0.5",
-      severity: "high",
-      score: 82,
-      predictedAttack: "Brute-force login",
-      forecastHorizon: "Next 10 minutes",
-      confidence: 0.87,
-      contributingFactors: [
-        "Failed login burst increased 4.2x",
-        "Unusual login time (03:00–04:00 local)",
-        "Requests from 3 new source IPs",
-      ],
-      recommendedActions: [
-        "Temporarily lock account after 5 failed attempts",
-        "Flag source IPs for review",
-      ],
-      trafficBefore: [10, 12, 11, 14, 40, 65],
-      trafficAfter: [65, 70, 68, 72, 75, 78],
-    },
-  };
-
-  return details[id] ?? details["1"]; // fallback so every id shows something for now
+export function getOverview(token: string, sourceId: string): Promise<Overview> {
+  return request<Overview>(`/analytics/overview?traffic_source_id=${encodeURIComponent(sourceId)}`, {}, token);
 }
 
-export async function startReplay(fileName: string) {
-  // Fake job trigger — pretend it starts processing
-  return { jobId: "job-001", status: "pending" };
+export function getForecast(token: string, sourceId: string): Promise<Forecast> {
+  return request<Forecast>(`/analytics/forecast?traffic_source_id=${encodeURIComponent(sourceId)}`, {}, token);
 }
-
-export async function getJobStatus(jobId: string) {
-  // Fake status check — normally you'd poll this repeatedly
-  return { jobId, status: "running", progress: 45 };
+export function saveForecast(token: string, sourceId: string): Promise<{alert_id: string; forecast: Forecast}> {
+  return request(`/analytics/forecast?traffic_source_id=${encodeURIComponent(sourceId)}`, { method: "POST" }, token);
+}
+export interface IngestionJob { id: string; traffic_source_id: string; status: string; total_rows: number; accepted_rows: number; skipped_rows: number; error_message: string | null; }
+export interface TrafficSource { id: string; name: string; source_type: "csv_replay" | "zeek_live"; description: string | null; is_active: boolean; created_at: string; updated_at: string; }
+export function listTrafficSources(token: string): Promise<TrafficSource[]> {
+  return request<TrafficSource[]>("/ingestion/sources", {}, token);
+}
+export function startReplay(token: string, file: File): Promise<IngestionJob> {
+  const form = new FormData(); form.append("file", file);
+  return request<IngestionJob>("/ingestion/upload", { method: "POST", body: form }, token);
+}
+export function getJobStatus(token: string, jobId: string): Promise<IngestionJob> {
+  return request<IngestionJob>(`/ingestion/${jobId}/status`, {}, token);
 }
