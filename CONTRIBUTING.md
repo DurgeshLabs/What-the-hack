@@ -7,8 +7,6 @@ and predictable so the demo build never breaks.
 - [First-time setup](#first-time-setup)
 - [Branches](#branches)
 - [Daily workflow](#daily-workflow)
-- [How to push your changes, by role](#how-to-push-your-changes-by-role)
-- [Commit messages](#commit-messages)
 - [Pull requests](#pull-requests)
 - [Issues and labels](#issues-and-labels)
 - [Rules that keep the demo safe](#rules-that-keep-the-demo-safe)
